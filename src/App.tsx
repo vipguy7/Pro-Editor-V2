@@ -62,7 +62,6 @@ const App: React.FC = () => {
 
   // State for original image dimensions (still useful)
   const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
-  // isApplyingEffects state removed as effects are now client-side and applied immediately or on redraw.
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -368,17 +367,6 @@ const App: React.FC = () => {
     }
 
     // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
-
-    // Loading indicator for applying effects
-    if (isApplyingEffects) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
-    }
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
