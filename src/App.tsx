@@ -1,6 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, DetectedFace } from './types';
+// DetectedFace removed from imports as it's no longer used
+import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings } from './types';
 import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS, TEXT_EDGE_MARGIN_FACTOR } from './constants';
 import { ManualRegion } from './types'; // Added ManualRegion
 
@@ -357,50 +358,7 @@ const App: React.FC = () => {
       ctx.fillRect(lineX, lineY, lineLength, lineThickness);
     }
 
-    // Draw detected face boxes
-    if (originalImage && originalImageDimensions && detectedFaces.length > 0) {
-      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
-
-      const scaleX = imgDrawWidth / originalImageDimensions.width;
-      const scaleY = imgDrawHeight / originalImageDimensions.height;
-
-      detectedFaces.forEach((face, index) => {
-        const canvasX = imgOffsetX + face.x * scaleX;
-        const canvasY = imgOffsetY + face.y * scaleY;
-        const canvasWidth = face.width * scaleX;
-        const canvasHeight = face.height * scaleY;
-
-        ctx.strokeStyle = 'rgba(0, 255, 0, 0.7)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
-
-        // Draw number
-        const textContent = `${index + 1}`;
-        ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
-        const fontSize = Math.max(12, Math.min(canvasWidth / 4, canvasHeight / 4));
-        ctx.font = `bold ${fontSize}px Arial`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-
-        const textMetrics = ctx.measureText(textContent);
-        const textBgPadding = fontSize * 0.2;
-        ctx.fillRect(canvasX, canvasY, textMetrics.width + textBgPadding * 2, fontSize + textBgPadding * 2);
-
-        ctx.fillStyle = 'black';
-        ctx.fillText(textContent, canvasX + textBgPadding, canvasY + textBgPadding);
-      });
-    }
-
-    // Loading indicator for face detection
-    if (isLoadingFaces) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Detecting Faces...', canvas.width / 2, canvas.height / 2);
-    }
+    // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
 
     // Loading indicator for applying effects
     if (isApplyingEffects) {
@@ -589,36 +547,7 @@ const App: React.FC = () => {
         img.onload = () => {
           setOriginalImage(img);
           setOriginalImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
-
-          // --- Mock API call for face detection ---
-          setIsLoadingFaces(true);
-          console.log("Simulating API call to /api/detect_faces with image data...");
-
-          // Simulate sending 'file' to backend. In a real scenario:
-          // const formData = new FormData();
-          // formData.append('file', file);
-          // fetch('/api/detect_faces', { method: 'POST', body: formData })
-          //  .then(res => res.json())
-          //  .then(data => { ... });
-
-          setTimeout(() => {
-            // Mock response based on a sample image or predefined boxes
-            // These coordinates are relative to original image dimensions
-            const mockFaces: DetectedFace[] = [
-              { id: 'face-0', x: img.naturalWidth * 0.15, y: img.naturalHeight * 0.2, width: img.naturalWidth * 0.2, height: img.naturalHeight * 0.25, label: 'person' },
-              { id: 'face-1', x: img.naturalWidth * 0.6, y: img.naturalHeight * 0.3, width: img.naturalWidth * 0.15, height: img.naturalHeight * 0.2, label: 'person' },
-            ];
-
-            // Simulate a case where no faces are detected for certain images (e.g. based on filename)
-            if (file.name.includes("noface")) {
-                 setDetectedFaces([]);
-                 console.log("Mock API: No faces detected for", file.name);
-            } else {
-                 setDetectedFaces(mockFaces);
-                 console.log("Mock API: Detected faces", mockFaces);
-            }
-            setIsLoadingFaces(false);
-          }, 1500); // Simulate network delay
+          // Old mock API call for face detection removed as part of manual region implementation.
         };
         img.src = imgSrc;
       };
