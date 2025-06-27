@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // DetectedFace removed from imports as it's no longer used
 import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
@@ -371,6 +370,7 @@ const App: React.FC = () => {
     // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
 
     // Loading indicator for applying effects
+    /*
     if (isApplyingEffects) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -380,6 +380,7 @@ const App: React.FC = () => {
         ctx.textBaseline = 'middle';
         ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
     }
+    */
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
@@ -408,10 +409,56 @@ const App: React.FC = () => {
 
           // 2. Apply the effect to the temporary canvas (e.g., blur the whole temp canvas)
           if (stroke.type === 'blur') {
-            tempCtx.filter = `blur(${stroke.effectStrength}px)`;
-            // To apply filter, draw the canvas onto itself or another canvas
-            // Draw itself: but this blurs the entire image on temp.
-            // Instead, we should draw the stroke path, then use it as a clip.
+            // Create a mask for the stroke path
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = canvas.width;
+            maskCanvas.height = canvas.height;
+            const maskCtx = maskCanvas.getContext('2d');
+            if (maskCtx) {
+              // Calculate firstScaledPointX/Y before use
+              const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetX;
+              const firstScaledPointY = stroke.points[0].y * displayScaleY + imgOffsetY;
+              maskCtx.save();
+              maskCtx.beginPath();
+              maskCtx.moveTo(firstScaledPointX, firstScaledPointY);
+              for (let i = 1; i < stroke.points.length; i++) {
+                const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
+                const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
+                maskCtx.lineTo(scaledX, scaledY);
+              }
+              maskCtx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
+              maskCtx.lineCap = 'round';
+              maskCtx.lineJoin = 'round';
+              maskCtx.strokeStyle = 'white';
+              maskCtx.stroke();
+              maskCtx.globalCompositeOperation = 'source-in';
+              maskCtx.fillStyle = 'white';
+              maskCtx.fill();
+              maskCtx.restore();
+
+              // Create a blurred version of the image
+              const blurCanvas = document.createElement('canvas');
+              blurCanvas.width = canvas.width;
+              blurCanvas.height = canvas.height;
+              const blurCtx = blurCanvas.getContext('2d');
+              if (blurCtx) {
+                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight);
+                blurCtx.filter = `blur(${stroke.effectStrength}px)`;
+                blurCtx.drawImage(blurCanvas, 0, 0);
+                blurCtx.filter = 'none';
+
+                // Apply the mask to the blurred image
+                blurCtx.globalCompositeOperation = 'destination-in';
+                blurCtx.drawImage(maskCanvas, 0, 0);
+                blurCtx.globalCompositeOperation = 'source-over';
+
+                // Draw the masked, blurred region onto the main canvas
+                ctx.save();
+                ctx.globalAlpha = 1.0;
+                ctx.drawImage(blurCanvas, 0, 0);
+                ctx.restore();
+              }
+            }
           } else if (stroke.type === 'pixelate') {
             // Pixelation will be applied to the region of the stroke later if this approach is used
             // For now, this means the temp canvas has the original image content.
@@ -448,8 +495,42 @@ const App: React.FC = () => {
                 blurCtx.drawImage(blurCanvas, 0, 0); // Apply filter by drawing itself
                 blurCtx.filter = 'none';
 
-                ctx.clip(path); // Clip the main canvas
-                ctx.drawImage(blurCanvas, 0, 0); // Draw the fully blurred temp image, clipped by path
+                // Create a mask for the stroke path
+                const maskCanvas = document.createElement('canvas');
+                maskCanvas.width = canvas.width;
+                maskCanvas.height = canvas.height;
+                const maskCtx = maskCanvas.getContext('2d');
+                if (maskCtx) {
+                  // Draw the stroke path as a filled region on the mask
+                  maskCtx.save();
+                  maskCtx.beginPath();
+                  maskCtx.moveTo(firstScaledPointX, firstScaledPointY);
+                  for (let i = 1; i < stroke.points.length; i++) {
+                    const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
+                    const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
+                    maskCtx.lineTo(scaledX, scaledY);
+                  }
+                  maskCtx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
+                  maskCtx.lineCap = 'round';
+                  maskCtx.lineJoin = 'round';
+                  maskCtx.strokeStyle = 'white';
+                  maskCtx.stroke();
+                  maskCtx.globalCompositeOperation = 'source-in';
+                  maskCtx.fillStyle = 'white';
+                  maskCtx.fill();
+                  maskCtx.restore();
+
+                  // Apply the mask to the blurred image
+                  blurCtx.globalCompositeOperation = 'destination-in';
+                  blurCtx.drawImage(maskCanvas, 0, 0);
+                  blurCtx.globalCompositeOperation = 'source-over';
+
+                  // Draw the masked, blurred region onto the main canvas
+                  ctx.save();
+                  ctx.globalAlpha = 1.0;
+                  ctx.drawImage(blurCanvas, 0, 0);
+                  ctx.restore();
+                }
             }
           } else if (stroke.type === 'pixelate') {
             // For pixelate, we need to operate on a region.
@@ -1006,7 +1087,7 @@ const App: React.FC = () => {
                 <input type="color" id="gradient-color1" value={rgbToHex(gradientOverlay.color1)} onChange={(e) => setGradientOverlay(prev => ({...prev, color1: hexToRgba(e.target.value, extractAlpha(prev.color1))}))} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md cursor-pointer" />
               </div>
               <div className="w-1/2">
-                <label htmlFor="gradient-color2" className="block text-sm font-medium text-gray-300">Color 2</label>
+                <label htmlFor="gradient-color2" className="block text-sm font-medium text-gray-300">Color  2</label>
                 <input type="color" id="gradient-color2" value={rgbToHex(gradientOverlay.color2)} onChange={(e) => setGradientOverlay(prev => ({...prev, color2: hexToRgba(e.target.value, extractAlpha(prev.color2))}))} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md cursor-pointer" />
               </div>
             </div>
@@ -1199,14 +1280,13 @@ const App: React.FC = () => {
             ref={interactionCanvasRef}
             className="max-w-full max-h-full absolute top-0 left-0"
             style={{
-                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
+                pointerEvents: (activeTool === 'blurBrush' || activeTool === 'pixelateBrush') ? 'auto' : 'none',
                 // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
                 // For simplicity, assuming parent 'main' is the direct positioning context.
                 // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
                 // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
                 // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
                 // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
-                // Let's assume `main` centers a stack, so they overlay.
                 zIndex: 10
             }}
             onMouseDown={handleInteractionMouseDown}
