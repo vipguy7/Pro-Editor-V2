@@ -501,29 +501,31 @@ const App: React.FC = () => {
     iCtx.clearRect(0, 0, iCanvas.width, iCanvas.height);
 
     // Draw brush cursor preview if a brush tool is active
-    if ((activeTool === 'blurBrush' || activeTool === 'pixelateBrush') && lastPoint && originalImageDimensions && originalImage && canvasRef.current) {
-        const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
-        const displayScaleY = imgDrawHeight / originalImageDimensions.height;
-
-        // lastPoint is in original image coords, convert to display canvas coords for cursor
-        // This part needs the *current* mouse position, not lastPoint to draw cursor.
-        // Let's assume for now we'll handle cursor drawing within mouseMove if needed, or this effect is for current stroke path.
+    if ((activeTool === 'blurBrush' || activeTool === 'pixelateBrush') && originalImageDimensions && originalImage && canvasRef.current) {
+      // Get mouse position relative to canvas (from last mouse event)
+      // We'll use lastPoint for the brush tip, but it should be in original image coords
+      // So, convert lastPoint (original image coords) to display canvas coords
+      if (lastPoint) {
+        const { drawWidth, drawHeight, offsetX, offsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+        const displayScaleX = drawWidth / originalImageDimensions.width;
+        const displayScaleY = drawHeight / originalImageDimensions.height;
+        const displayX = lastPoint.x * displayScaleX + offsetX;
+        const displayY = lastPoint.y * displayScaleY + offsetY;
+        const brushRadius = currentBrushSettings.size * Math.min(displayScaleX, displayScaleY) / 2;
+        iCtx.beginPath();
+        iCtx.arc(displayX, displayY, brushRadius, 0, Math.PI * 2);
+        iCtx.strokeStyle = 'rgba(0,0,0,0.7)';
+        iCtx.lineWidth = 2;
+        iCtx.stroke();
+      }
     }
-
-    // Draw current path being painted (if isPainting)
-    // This requires currentPath to be part of state or passed here.
-    // For simplicity, let's assume `isPainting` and `currentBrushSettings.points` (if we add it) would be used.
-    // The current approach will be to draw the stroke path in mouseMove directly.
-    // This useEffect might be better for just the brush cursor.
-    // For now, live stroke drawing will be handled in mouseMove and then committed.
-  // This useEffect will now primarily clear the interaction canvas when the tool changes or drawing stops.
-  // Live drawing preview happens in handleInteractionMouseMove.
-  }, [activeTool]);
+    // No need to draw stroke path here; it's handled in mouseMove for live feedback.
+  }, [activeTool, lastPoint, currentBrushSettings.size, originalImage, originalImageDimensions]);
 
 
   // Helper function to calculate image drawing parameters (to avoid repetition)
   const calculateImageDrawParams = (
-    currentOriginalImage: HTMLImageElement,
+    _unused: HTMLImageElement, // parameter not used
     currentCanvas: HTMLCanvasElement,
     currentOriginalImageDimensions: {width: number, height: number}
   ) => {
@@ -583,43 +585,49 @@ const App: React.FC = () => {
   };
 
   const handleInteractionMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isPainting || !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage || !lastPoint) return;
+    if (!(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage) return;
 
     const pos = getMousePos(interactionCanvasRef.current, event);
     const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
 
+    // Always update brush tip position for cursor preview
     if (originalImgPos) {
-      const iCtx = interactionCanvasRef.current.getContext('2d');
-      if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
+      setLastPoint(originalImgPos);
+    }
 
-      // Preview on interaction canvas (simple line for path, and cursor)
-      iCtx.clearRect(0,0, iCtx.canvas.width, iCtx.canvas.height);
+    // Only draw path if painting
+    if (!isPainting || !lastPoint) return;
 
-      // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
-      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
-      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
-      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+    const iCtx = interactionCanvasRef.current.getContext('2d');
+    if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
 
-      const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
-      const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
-      const currentDisplayX = originalImgPos.x * displayScaleX + imgOffsetX;
-      const currentDisplayY = originalImgPos.y * displayScaleY + imgOffsetY;
+    // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
+    const { drawWidth, drawHeight, offsetX, offsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+    const displayScaleX = drawWidth / originalImageDimensions.width;
+    const displayScaleY = drawHeight / originalImageDimensions.height;
+
+    if (originalImgPos) {
+      const lastDisplayX = lastPoint.x * displayScaleX + offsetX;
+      const lastDisplayY = lastPoint.y * displayScaleY + offsetY;
+      const currentDisplayX = originalImgPos.x * displayScaleX + offsetX;
+      const currentDisplayY = originalImgPos.y * displayScaleY + offsetY;
 
       // Draw line segment for current stroke part
+      iCtx.clearRect(0, 0, iCtx.canvas.width, iCtx.canvas.height);
       iCtx.beginPath();
       iCtx.moveTo(lastDisplayX, lastDisplayY);
       iCtx.lineTo(currentDisplayX, currentDisplayY);
-      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red line for path preview
-      iCtx.lineWidth = currentBrushSettings.size * displayScaleX; // Scale brush size for display
+      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+      iCtx.lineWidth = currentBrushSettings.size * Math.min(displayScaleX, displayScaleY);
       iCtx.lineCap = 'round';
       iCtx.lineJoin = 'round';
       iCtx.stroke();
 
-      // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
+      // Draw brush cursor outline at current mouse position
       iCtx.beginPath();
-      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
-      iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-      iCtx.lineWidth = 1;
+      iCtx.arc(currentDisplayX, currentDisplayY, currentBrushSettings.size * Math.min(displayScaleX, displayScaleY) / 2, 0, Math.PI * 2);
+      iCtx.strokeStyle = 'rgba(0,0,0,0.7)';
+      iCtx.lineWidth = 2;
       iCtx.stroke();
 
       setCurrentStrokePoints(prev => [...prev, originalImgPos]);
