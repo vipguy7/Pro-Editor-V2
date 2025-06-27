@@ -370,16 +370,7 @@ const App: React.FC = () => {
 
     // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
 
-    // Loading indicator for applying effects
-    if (isApplyingEffects) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
-    }
+    // Loading indicator for applying effects (isApplyingEffects) has been removed as it's no longer used.
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
