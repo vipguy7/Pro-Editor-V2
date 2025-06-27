@@ -81,7 +81,18 @@ export interface ImageEffectsSettings {
   vintage: number;    // 0-100, 0 is default (sepia intensity)
 }
 
-export type ActiveTool = 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects' | null;
+export type ActiveTool =
+  | 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects'
+  | 'blurBrush' | 'pixelateBrush'
+  | null;
+
+export interface BrushStroke {
+  id: string;
+  type: 'blur' | 'pixelate';
+  points: { x: number; y: number }[]; // Coordinates relative to original image
+  brushSize: number; // Radius of the brush
+  effectStrength: number; // Intensity for blur, block size for pixelate
+}
 
 export interface HistoryEntry {
   texts: TextElement[];
@@ -89,4 +100,7 @@ export interface HistoryEntry {
   logoSettings: LogoSettings | null;
   cropSize: CropSize;
   imageEffects: ImageEffectsSettings;
+  brushStrokes?: BrushStroke[]; // Add brush strokes to history
 }
+
+// ManualRegion, EffectParams, DetectedFace, FaceEffectSelection have been removed or are no longer needed.

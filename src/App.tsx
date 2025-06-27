@@ -1,7 +1,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings } from './types';
-import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS } from './constants';
+// DetectedFace removed from imports as it's no longer used
+import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
+import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS, TEXT_EDGE_MARGIN_FACTOR } from './constants';
+// ManualRegion import removed
+// import { ManualRegion } from './types';
+
 // import LoadingSpinner from './components/LoadingSpinner'; // Not used
 
 // Helper Icons (simple SVGs)
@@ -14,6 +18,25 @@ const EffectsIcon: React.FC<{className?: string}> = ({className}) => (
     <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
   </svg>
 );
+// FaceIcon is no longer used.
+// RegionSelectIcon is no longer used for rectangular selection and has been removed.
+// New Brush Icons
+const BlurBrushIcon: React.FC<{className?: string}> = ({className}) => ( // Simple placeholder
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="8" opacity="0.5"/>
+        <path d="M12 4a8 8 0 00-8 8 8 8 0 008 8 8 8 0 008-8 8 8 0 00-8-8zm0 14a6 6 0 01-6-6 6 6 0 016-6 6 6 0 016 6 6 6 0 01-6 6z" />
+        <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="8px" fill="white">B</text>
+    </svg>
+);
+const PixelateBrushIcon: React.FC<{className?: string}> = ({className}) => ( // Simple placeholder
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="6" width="4" height="4" /> <rect x="10" y="6" width="4" height="4" opacity="0.7"/> <rect x="14" y="6" width="4" height="4" />
+        <rect x="6" y="10" width="4" height="4" opacity="0.7"/> <rect x="10" y="10" width="4" height="4" /> <rect x="14" y="10" width="4" height="4" opacity="0.7"/>
+        <rect x="6" y="14" width="4" height="4" /> <rect x="10" y="14" width="4" height="4" opacity="0.7"/> <rect x="14" y="14" width="4" height="4" />
+    </svg>
+);
+
+
 const BoldIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.5 3A.5.5 0 007 3.5v2.096c-2.21.384-2.94 1.152-2.94 2.232C4.06 9.06 5.38 10 7.5 10h1.388c.056.054.11.11.162.162l1.5 1.5H7.5c-1.105 0-2 .895-2 2s.895 2 2 2h2.793l-1.147 1.146a.5.5 0 10.708.708L12.5 15h.5a.5.5 0 00.5-.5v-1.586l.07-.058C15.446 11.114 16 9.84 16 8.328 16 5.522 12.478 3 7.5 3zm0 1.5c2.61 0 4.5 1.524 4.5 3.828 0 1.138-.72 2.008-2.086 2.388L9.5 10.5H7.5c-.938 0-1.44-.612-1.44-1.268 0-.774.698-1.336 1.44-1.424V4.5z" clipRule="evenodd" /></svg>;
 const ItalicIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 3.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414V12a1 1 0 11-2 0V7.414L6.293 9.707a1 1 0 01-1.414-1.414l2-2a1.414 1.414 0 010-2zM6 15a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" clipRule="evenodd" transform="skewX(-15)" /></svg>;
 const UnderlineIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path d="M5 15h10v1H5v-1zm0-1.5A1.5 1.5 0 016.5 12H7V5H5v8.5zm10-8.5v7h.5a1.5 1.5 0 011.5 1.5V15h-2v-.5a.5.5 0 00-.5-.5h-7a.5.5 0 00-.5.5V15H3v-.5A1.5 1.5 0 014.5 13H5v-7a2 2 0 012-2h6a2 2 0 012 2z"/></svg>;
@@ -21,7 +44,7 @@ const UnderlineIcon: React.FC<{ className?: string }> = ({ className }) => <svg 
 
 const App: React.FC = () => {
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
-  const [imageFileName, setImageFileName] = useState<string>('edited_image.png');
+  const [imageFileName, setImageFileName] = useState<string>('edited_image.png'); // Keep for export and backend communication
   const [cropSize, setCropSize] = useState<CropSize>(DEFAULT_CROP_SIZE);
   const [texts, setTexts] = useState<TextElement[]>(INITIAL_TEXT_ELEMENTS);
   const [gradientOverlay, setGradientOverlay] = useState<GradientSettings>(INITIAL_GRADIENT_SETTINGS);
@@ -30,13 +53,44 @@ const App: React.FC = () => {
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(texts.length > 0 ? texts[0].id : null);
   const [imageEffects, setImageEffects] = useState<ImageEffectsSettings>(INITIAL_IMAGE_EFFECTS_SETTINGS);
 
+  // States for brush tools
+  const [brushStrokes, setBrushStrokes] = useState<BrushStroke[]>([]);
+  const [currentBrushSettings, setCurrentBrushSettings] = useState<{ type: 'blur' | 'pixelate' | null, size: number, strength: number }>({ type: null, size: 20, strength: 10 });
+  const [isPainting, setIsPainting] = useState<boolean>(false);
+  const [lastPoint, setLastPoint] = useState<{x: number, y: number} | null>(null); // For stroke drawing, in original image coords
+  const [currentStrokePoints, setCurrentStrokePoints] = useState<{x: number, y: number}[]>([]); // Points for the current stroke, in original image coords
+
+
+  // State for original image dimensions (still useful)
+  const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
+  // isApplyingEffects state removed as effects are now client-side and applied immediately or on redraw.
+
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const interactionCanvasRef = useRef<HTMLCanvasElement>(null); // For drawing interactions
   const logoImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Helper to get mouse position relative to canvas
+  const getMousePos = (canvas: HTMLCanvasElement, evt: React.MouseEvent): { x: number, y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: evt.clientX - rect.left,
+      y: evt.clientY - rect.top
+    };
+  };
 
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
+
+    // Ensure interaction canvas has same dimensions
+    const iCanvas = interactionCanvasRef.current;
+    if (iCanvas) {
+        iCanvas.width = canvas.width;
+        iCanvas.height = canvas.height;
+    }
+
 
     canvas.width = cropSize.width;
     canvas.height = cropSize.height;
@@ -45,22 +99,8 @@ const App: React.FC = () => {
     ctx.fillStyle = '#2d3748'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (originalImage) {
-      const imgAspect = originalImage.naturalWidth / originalImage.naturalHeight;
-      const canvasAspect = canvas.width / canvas.height;
-      let drawWidth, drawHeight, offsetX, offsetY;
-
-      if (imgAspect > canvasAspect) {
-        drawHeight = canvas.height;
-        drawWidth = drawHeight * imgAspect;
-        offsetX = (canvas.width - drawWidth) / 2;
-        offsetY = 0;
-      } else {
-        drawWidth = canvas.width;
-        drawHeight = drawWidth / imgAspect;
-        offsetY = (canvas.height - drawHeight) / 2;
-        offsetX = 0;
-      }
+    if (originalImage && originalImageDimensions) { // Ensure originalImageDimensions is available
+      const { drawWidth, drawHeight, offsetX, offsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
 
       const { brightness, contrast, vintage, clarity } = imageEffects;
       const effectiveContrast = contrast + (clarity / 2); 
@@ -69,6 +109,8 @@ const App: React.FC = () => {
       ctx.filter = 'none';
 
     } else {
+        // Display placeholder if originalImage or originalImageDimensions is not yet available
+        // or if specifically no image is loaded.
         ctx.fillStyle = '#A0AEC0';
         ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
         ctx.textAlign = 'center';
@@ -116,22 +158,45 @@ const App: React.FC = () => {
       ctx.font = fontString;
       
       ctx.textAlign = textAlign;
-      ctx.textBaseline = 'middle';
+      ctx.textBaseline = 'middle'; // Affects how yPosPx is interpreted for fillText
 
-      const xPosPx = (x / 100) * canvas.width;
-      let yPosPx = (y / 100) * canvas.height;
+      const marginLeft = canvas.width * TEXT_EDGE_MARGIN_FACTOR;
+      const marginRight = canvas.width - canvas.width * TEXT_EDGE_MARGIN_FACTOR;
+      const marginTop = canvas.height * TEXT_EDGE_MARGIN_FACTOR;
+      const marginBottom = canvas.height - canvas.height * TEXT_EDGE_MARGIN_FACTOR;
+
+      // Calculate initial x and y based on percentages
+      let initialXPosPx = (x / 100) * canvas.width;
+      let initialYPosPx = (y / 100) * canvas.height;
+
+      // Determine max available width for text based on its initial X position and alignment
+      let availableWidthForText = canvas.width;
+      if (textAlign === 'left') {
+        availableWidthForText = marginRight - initialXPosPx;
+      } else if (textAlign === 'right') {
+        availableWidthForText = initialXPosPx - marginLeft;
+      } else { // center
+        availableWidthForText = Math.min(initialXPosPx - marginLeft, marginRight - initialXPosPx) * 2;
+      }
+      availableWidthForText = Math.max(0, availableWidthForText); // Ensure not negative
+
+      let constrainedMaxWidthPx;
+      if (maxWidthPercent && maxWidthPercent > 0) {
+        constrainedMaxWidthPx = Math.min((maxWidthPercent / 100) * canvas.width, availableWidthForText);
+      } else {
+        constrainedMaxWidthPx = availableWidthForText;
+      }
+      constrainedMaxWidthPx = Math.max(fontSizePx, constrainedMaxWidthPx); // Ensure at least one char can fit if possible
 
       const lines: string[] = [];
-      const actualMaxWidthPx = maxWidthPercent > 0 ? (maxWidthPercent / 100) * canvas.width : undefined;
-
-      if (actualMaxWidthPx) {
+      if (text && constrainedMaxWidthPx > 0) {
         const words = text.split(' ');
         let currentLine = words[0] || '';
         if (words.length > 1) {
             for (let i = 1; i < words.length; i++) {
                 const word = words[i];
-                const testLine = currentLine + ' ' + word;
-                if (ctx.measureText(testLine).width > actualMaxWidthPx) {
+                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                if (ctx.measureText(testLine).width > constrainedMaxWidthPx && currentLine) {
                     lines.push(currentLine);
                     currentLine = word;
                 } else {
@@ -140,31 +205,60 @@ const App: React.FC = () => {
             }
         }
         lines.push(currentLine);
-      } else {
-        lines.push(text);
+      } else if (text) {
+        lines.push(text); // No wrapping if no constrainedMaxWidth or text is empty
       }
-      
-      const actualLineHeightPx = fontSizePx * lineHeight;
-      const totalTextHeight = (lines.length -1) * actualLineHeightPx + fontSizePx;
-      
-      yPosPx = yPosPx - totalTextHeight / 2 + fontSizePx / 2; 
 
-      if (backgroundEnabled) {
-        let maxLineWidth = 0;
-        lines.forEach(line => {
-            maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
-        });
+
+      const actualLineHeightPx = fontSizePx * lineHeight;
+      const totalTextHeight = lines.length > 0 ? (lines.length - 1) * actualLineHeightPx + fontSizePx : 0;
+
+      // Adjust Y position: yPosPx is the baseline of the first line of text.
+      // We set textBaseline = 'middle', so fillText uses y as the vertical center.
+      // The block of text should be centered around initialYPosPx.
+      let finalYPosPx = initialYPosPx - totalTextHeight / 2 + fontSizePx / 2; // Baseline for the first line
+
+      // Clamp Y to prevent overflow, after totalTextHeight is known
+      finalYPosPx = Math.max(finalYPosPx, marginTop + totalTextHeight / 2 - fontSizePx / 2);
+      finalYPosPx = Math.min(finalYPosPx, marginBottom - totalTextHeight / 2 + fontSizePx / 2);
+
+
+      // Adjust X position based on final max line width and alignment, clamped to margins
+      let maxLineWidth = 0;
+      lines.forEach(line => {
+          maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
+      });
+
+      let finalXPosPx = initialXPosPx;
+      if (textAlign === 'left') {
+        finalXPosPx = Math.max(initialXPosPx, marginLeft);
+      } else if (textAlign === 'right') {
+        finalXPosPx = Math.min(initialXPosPx, marginRight);
+      } else { // center
+        finalXPosPx = Math.max(initialXPosPx, marginLeft + maxLineWidth / 2);
+        finalXPosPx = Math.min(finalXPosPx, marginRight - maxLineWidth / 2);
+      }
+
+
+      if (backgroundEnabled && lines.length > 0) {
         const bgWidth = maxLineWidth + backgroundPaddingX * 2;
         const bgHeight = totalTextHeight + backgroundPaddingY * 2;
         
-        let bgX = xPosPx;
-        if (textAlign === 'center') bgX = xPosPx - bgWidth / 2;
-        else if (textAlign === 'right') bgX = xPosPx - bgWidth;
+        let bgX = finalXPosPx; // Default for left align
+        if (textAlign === 'center') bgX = finalXPosPx - maxLineWidth / 2; // Center point is finalXPosPx
+        else if (textAlign === 'right') bgX = finalXPosPx - maxLineWidth; // Right edge is finalXPosPx
         
-        const bgY = yPosPx - fontSizePx / 2 - backgroundPaddingY; 
+        bgX -= backgroundPaddingX; // Adjust for padding
+        const bgY = finalYPosPx - fontSizePx / 2 - backgroundPaddingY; // finalYPosPx is baseline of first line.
 
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+        // Clamp background drawing to canvas boundaries as well, though ideally text clamping handles most of this.
+        // This is a simplified clamping for bg; more precise would involve checking all 4 bg corners.
+        const clampedBgX = Math.max(0, bgX);
+        const clampedBgY = Math.max(0, bgY);
+        const clampedBgWidth = Math.min(bgWidth, canvas.width - clampedBgX);
+        const clampedBgHeight = Math.min(bgHeight, canvas.height - clampedBgY);
+        ctx.fillRect(clampedBgX, clampedBgY, clampedBgWidth, clampedBgHeight);
       }
       
       const originalShadowOffsetX = ctx.shadowOffsetX;
@@ -177,7 +271,7 @@ const App: React.FC = () => {
 
 
       lines.forEach((line, index) => {
-        const currentLineY = yPosPx + (index * actualLineHeightPx);
+        const currentLineY = finalYPosPx + (index * actualLineHeightPx); // Use finalYPosPx
         
         if (shadowEnabled) {
           ctx.shadowOffsetX = shadowOffsetX;
@@ -194,11 +288,11 @@ const App: React.FC = () => {
         if (outlineEnabled && outlineWidth > 0) {
           ctx.strokeStyle = outlineColor;
           ctx.lineWidth = outlineWidth;
-          ctx.strokeText(line, xPosPx, currentLineY);
+          ctx.strokeText(line, finalXPosPx, currentLineY);
         }
         
         ctx.fillStyle = color;
-        ctx.fillText(line, xPosPx, currentLineY);
+        ctx.fillText(line, finalXPosPx, currentLineY);
 
         // Reset shadow for other elements (like underline)
         ctx.shadowOffsetX = 0;
@@ -209,12 +303,12 @@ const App: React.FC = () => {
         if (textDecoration === 'underline') {
           const textMetrics = ctx.measureText(line);
           const lineWidth = textMetrics.width;
-          let lineXStart = xPosPx;
+          let lineXStart = finalXPosPx; // Use finalXPosPx
 
           if (textAlign === 'center') {
-            lineXStart = xPosPx - lineWidth / 2;
+            lineXStart = finalXPosPx - lineWidth / 2; // Use finalXPosPx
           } else if (textAlign === 'right') {
-            lineXStart = xPosPx - lineWidth;
+            lineXStart = finalXPosPx - lineWidth; // Use finalXPosPx
           }
           
           const lineY = currentLineY + fontSizePx / 2 + Math.max(1, fontSizePx * 0.05); // Position underline slightly below baseline
@@ -274,25 +368,345 @@ const App: React.FC = () => {
       ctx.fillRect(lineX, lineY, lineLength, lineThickness);
     }
 
-  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects]);
+    // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
+
+    // Loading indicator for applying effects
+    if (isApplyingEffects) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
+    }
+
+    // Draw Brush Strokes on the main canvas
+    if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+      // Create a single temporary canvas for processing strokes one by one
+      const tempEffectCanvas = document.createElement('canvas');
+      tempEffectCanvas.width = canvas.width;
+      tempEffectCanvas.height = canvas.height;
+      const tempCtx = tempEffectCanvas.getContext('2d');
+
+      if (tempCtx) {
+        brushStrokes.forEach(stroke => {
+          if (stroke.points.length < 1) return;
+
+          // 1. Clear temp canvas and draw the current state of the main canvas (image + previous strokes)
+          //    OR, for better effect isolation, draw the original image portion.
+          //    Let's try drawing the original image portion for cleaner effect application.
+          tempCtx.clearRect(0, 0, tempEffectCanvas.width, tempEffectCanvas.height);
+          tempCtx.drawImage(originalImage,
+            0, 0, originalImageDimensions.width, originalImageDimensions.height,
+            imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight
+          );
+
+          // 2. Apply the effect to the temporary canvas (e.g., blur the whole temp canvas)
+          if (stroke.type === 'blur') {
+            tempCtx.filter = `blur(${stroke.effectStrength}px)`;
+            // To apply filter, draw the canvas onto itself or another canvas
+            // Draw itself: but this blurs the entire image on temp.
+            // Instead, we should draw the stroke path, then use it as a clip.
+          } else if (stroke.type === 'pixelate') {
+            // Pixelation will be applied to the region of the stroke later if this approach is used
+            // For now, this means the temp canvas has the original image content.
+            // A more direct approach for pixelation would be to get image data, pixelate, then draw.
+          }
+
+          // 3. Create the stroke path (scaled to display coordinates)
+          const path = new Path2D();
+          const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetX;
+          const firstScaledPointY = stroke.points[0].y * displayScaleY + imgOffsetY;
+          path.moveTo(firstScaledPointX, firstScaledPointY);
+          for (let i = 1; i < stroke.points.length; i++) {
+            const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
+            const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
+            path.lineTo(scaledX, scaledY);
+          }
+
+          // 4. Draw the stroke with the effect onto the main canvas `ctx`
+          ctx.save();
+          ctx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY); // Scaled brush size
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          if (stroke.type === 'blur') {
+            // Apply blur to the temp canvas where the original image part is.
+            // Then clip with the path and draw to main.
+            const blurCanvas = document.createElement('canvas');
+            blurCanvas.width = canvas.width;
+            blurCanvas.height = canvas.height;
+            const blurCtx = blurCanvas.getContext('2d');
+            if(blurCtx){
+                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight);
+                blurCtx.filter = `blur(${stroke.effectStrength}px)`;
+                blurCtx.drawImage(blurCanvas, 0, 0); // Apply filter by drawing itself
+                blurCtx.filter = 'none';
+
+                ctx.clip(path); // Clip the main canvas
+                ctx.drawImage(blurCanvas, 0, 0); // Draw the fully blurred temp image, clipped by path
+            }
+          } else if (stroke.type === 'pixelate') {
+            // For pixelate, we need to operate on a region.
+            // Get bounding box of the stroke to minimize processing area.
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            stroke.points.forEach(p => {
+                const sx = p.x * displayScaleX + imgOffsetX;
+                const sy = p.y * displayScaleY + imgOffsetY;
+                minX = Math.min(minX, sx); minY = Math.min(minY, sy);
+                maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy);
+            });
+            const brushDisplaySize = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
+            minX -= brushDisplaySize / 2; minY -= brushDisplaySize / 2;
+            maxX += brushDisplaySize / 2; maxY += brushDisplaySize / 2;
+            const regionWidth = Math.max(1, maxX - minX);
+            const regionHeight = Math.max(1, maxY - minY);
+
+            if (regionWidth > 0 && regionHeight > 0) {
+                const pixelTempCanvas = document.createElement('canvas');
+                pixelTempCanvas.width = regionWidth;
+                pixelTempCanvas.height = regionHeight;
+                const pTempCtx = pixelTempCanvas.getContext('2d');
+                if (pTempCtx) {
+                    // Draw the relevant part of original image onto this smaller temp canvas
+                    pTempCtx.drawImage(originalImage,
+                        (minX - imgOffsetX) / displayScaleX, (minY - imgOffsetY) / displayScaleY, // srcX, srcY (original img coords)
+                        regionWidth / displayScaleX, regionHeight / displayScaleY,            // srcWidth, srcHeight (original img coords)
+                        0, 0, regionWidth, regionHeight                                      // destX, destY, destWidth, destHeight (on pixelTempCanvas)
+                    );
+
+                    // Pixelate this small canvas
+                    const B_SIZE = Math.max(2, stroke.effectStrength); // Ensure block size is at least 2
+                    const smallW = Math.max(1, Math.floor(regionWidth / B_SIZE));
+                    const smallH = Math.max(1, Math.floor(regionHeight / B_SIZE));
+                    pTempCtx.imageSmoothingEnabled = false;
+                    pTempCtx.drawImage(pixelTempCanvas, 0, 0, regionWidth, regionHeight, 0, 0, smallW, smallH);
+                    pTempCtx.drawImage(pixelTempCanvas, 0, 0, smallW, smallH, 0, 0, regionWidth, regionHeight);
+                    pTempCtx.imageSmoothingEnabled = true;
+
+                    // Clip main canvas with stroke path (path needs to be offset to region's top-left for this draw)
+                    ctx.clip(path);
+                    ctx.drawImage(pixelTempCanvas, minX, minY);
+                }
+            }
+            console.warn("Pixelation brush is a complex effect for arbitrary paths; current version is an approximation.");
+          }
+          ctx.restore(); // Restore clipping state
+        });
+      }
+    }
+
+  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, brushStrokes, originalImageDimensions]);
+
+  // Separate redraw for interaction canvas (live brush cursor and current stroke path)
+  useEffect(() => {
+    const iCanvas = interactionCanvasRef.current;
+    if (!iCanvas) return;
+
+    const iCtx = iCanvas.getContext('2d');
+    if (!iCtx) return;
+
+    iCtx.clearRect(0, 0, iCanvas.width, iCanvas.height);
+
+    // Draw brush cursor preview if a brush tool is active
+    if ((activeTool === 'blurBrush' || activeTool === 'pixelateBrush') && lastPoint && originalImageDimensions && originalImage && canvasRef.current) {
+        const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+        const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+        const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+        // lastPoint is in original image coords, convert to display canvas coords for cursor
+        // This part needs the *current* mouse position, not lastPoint to draw cursor.
+        // Let's assume for now we'll handle cursor drawing within mouseMove if needed, or this effect is for current stroke path.
+    }
+
+    // Draw current path being painted (if isPainting)
+    // This requires currentPath to be part of state or passed here.
+    // For simplicity, let's assume `isPainting` and `currentBrushSettings.points` (if we add it) would be used.
+    // The current approach will be to draw the stroke path in mouseMove directly.
+    // This useEffect might be better for just the brush cursor.
+    // For now, live stroke drawing will be handled in mouseMove and then committed.
+  // This useEffect will now primarily clear the interaction canvas when the tool changes or drawing stops.
+  // Live drawing preview happens in handleInteractionMouseMove.
+  }, [activeTool]);
+
+
+  // Helper function to calculate image drawing parameters (to avoid repetition)
+  const calculateImageDrawParams = (
+    currentOriginalImage: HTMLImageElement,
+    currentCanvas: HTMLCanvasElement,
+    currentOriginalImageDimensions: {width: number, height: number}
+  ) => {
+      const imgAspect = currentOriginalImageDimensions.width / currentOriginalImageDimensions.height;
+      const canvasAspect = currentCanvas.width / currentCanvas.height;
+      let drawWidth, drawHeight, offsetX, offsetY;
+
+      if (imgAspect > canvasAspect) {
+        drawHeight = currentCanvas.height;
+        drawWidth = drawHeight * imgAspect;
+        offsetX = (currentCanvas.width - drawWidth) / 2;
+        offsetY = 0;
+      } else {
+        drawWidth = currentCanvas.width;
+        drawHeight = drawWidth / imgAspect;
+        offsetY = (currentCanvas.height - drawHeight) / 2;
+        offsetX = 0;
+      }
+      return { drawWidth, drawHeight, offsetX, offsetY };
+  };
+
 
   useEffect(() => {
     redrawCanvas();
   }, [redrawCanvas]);
 
+  // Converts canvas interaction coordinates to original image coordinates
+  const getOriginalImageCoords = (canvasX: number, canvasY: number): { x: number, y: number } | null => {
+    if (!originalImage || !originalImageDimensions || !canvasRef.current) return null;
+    const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+
+    // Check if the click is within the drawn image bounds on the canvas
+    if (canvasX < imgOffsetX || canvasX > imgOffsetX + imgDrawWidth || canvasY < imgOffsetY || canvasY > imgOffsetY + imgDrawHeight) {
+      return null; // Click was outside the image
+    }
+
+    const scaleX = originalImageDimensions.width / imgDrawWidth;
+    const scaleY = originalImageDimensions.height / imgDrawHeight;
+    return {
+      x: (canvasX - imgOffsetX) * scaleX,
+      y: (canvasY - imgOffsetY) * scaleY,
+    };
+  };
+
+
+  const handleInteractionMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage) return;
+
+    const pos = getMousePos(interactionCanvasRef.current, event);
+    const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
+
+    if (originalImgPos) {
+      setIsPainting(true);
+      setLastPoint(originalImgPos);
+      setCurrentStrokePoints([originalImgPos]); // Start new stroke
+    }
+  };
+
+  const handleInteractionMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isPainting || !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage || !lastPoint) return;
+
+    const pos = getMousePos(interactionCanvasRef.current, event);
+    const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
+
+    if (originalImgPos) {
+      const iCtx = interactionCanvasRef.current.getContext('2d');
+      if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
+
+      // Preview on interaction canvas (simple line for path, and cursor)
+      iCtx.clearRect(0,0, iCtx.canvas.width, iCtx.canvas.height);
+
+      // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+      const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
+      const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
+      const currentDisplayX = originalImgPos.x * displayScaleX + imgOffsetX;
+      const currentDisplayY = originalImgPos.y * displayScaleY + imgOffsetY;
+
+      // Draw line segment for current stroke part
+      iCtx.beginPath();
+      iCtx.moveTo(lastDisplayX, lastDisplayY);
+      iCtx.lineTo(currentDisplayX, currentDisplayY);
+      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red line for path preview
+      iCtx.lineWidth = currentBrushSettings.size * displayScaleX; // Scale brush size for display
+      iCtx.lineCap = 'round';
+      iCtx.lineJoin = 'round';
+      iCtx.stroke();
+
+      // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
+      iCtx.beginPath();
+      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
+      iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+      iCtx.lineWidth = 1;
+      iCtx.stroke();
+
+      setCurrentStrokePoints(prev => [...prev, originalImgPos]);
+      setLastPoint(originalImgPos);
+    }
+  };
+
+  const handleInteractionMouseUp = () => {
+    if (!isPainting || !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush')) return;
+    setIsPainting(false);
+    setLastPoint(null);
+
+    if (currentStrokePoints.length > 1 && currentBrushSettings.type) {
+      const newStroke: BrushStroke = {
+        id: `stroke-${Date.now()}`,
+        type: currentBrushSettings.type,
+        points: [...currentStrokePoints],
+        brushSize: currentBrushSettings.size,
+        effectStrength: currentBrushSettings.strength,
+      };
+      setBrushStrokes(prev => [...prev, newStroke]);
+    }
+    setCurrentStrokePoints([]); // Clear points for next stroke
+
+    // Clear interaction canvas after stroke is committed to main canvas via redraw
+    const iCanvas = interactionCanvasRef.current;
+    if (iCanvas) {
+        const iCtx = iCanvas.getContext('2d');
+        iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
+    }
+  };
+
+  const handleInteractionMouseLeave = () => {
+    if (isPainting) { // If painting and mouse leaves, finalize stroke
+      handleInteractionMouseUp();
+    }
+    // Clear brush cursor if not painting and mouse leaves
+    const iCanvas = interactionCanvasRef.current;
+     if (iCanvas && !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush')) {
+        const iCtx = iCanvas.getContext('2d');
+        iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
+    }
+  };
+
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setImageFileName(file.name.substring(0, file.name.lastIndexOf('.')) + '_edited.png');
+      // Reset states for new image
+      setOriginalImage(null);
+      setOriginalImageDimensions(null);
+      setBrushStrokes([]); // Clear brush strokes
+      setCurrentStrokePoints([]);
+      setIsPainting(false);
+      setLastPoint(null);
+      // setManualRegions([]); // This state is removed
+      // setCurrentDrawingRegion(null); // This state is removed
+      // setIsDrawing(false); // This state is removed
+      // setStartPoint(null); // This state is removed
+
       const reader = new FileReader();
       reader.onload = (e) => {
+        const imgSrc = e.target?.result as string;
         const img = new Image();
         img.onload = () => {
           setOriginalImage(img);
+          setOriginalImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+          // Old mock API call for face detection removed as part of manual region implementation.
         };
-        img.src = e.target?.result as string;
+        img.src = imgSrc;
       };
       reader.readAsDataURL(file);
-      setImageFileName(file.name.substring(0, file.name.lastIndexOf('.')) + '_edited.png');
     }
   };
   
@@ -652,10 +1066,82 @@ const App: React.FC = () => {
             </button>
           </div>
         );
+      // REMOVED ERRONEOUS DEFAULT HERE
+      // case 'faceProcessor': // This case is now removed
+      // case 'regionSelector': // This case is now removed
+
+      case 'blurBrush':
+      case 'pixelateBrush':
+        if (!originalImage) {
+          return <div className="p-4 text-gray-400">Upload an image to use brush tools.</div>;
+        }
+
+        const isBlurActive = activeTool === 'blurBrush';
+        const isPixelateActive = activeTool === 'pixelateBrush';
+
+        // Ensure currentBrushSettings reflects the active tool
+        if (isBlurActive && currentBrushSettings.type !== 'blur') {
+            setCurrentBrushSettings(prev => ({ ...prev, type: 'blur' }));
+        } else if (isPixelateActive && currentBrushSettings.type !== 'pixelate') {
+            setCurrentBrushSettings(prev => ({ ...prev, type: 'pixelate' }));
+        }
+
+
+        return (
+          <div className="space-y-4 p-4">
+            <h3 className="text-lg font-semibold text-blue-300">
+              {isBlurActive ? 'Blur Brush Settings' : 'Pixelate Brush Settings'}
+            </h3>
+
+            <div>
+              <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">Brush Size ({currentBrushSettings.size}px)</label>
+              <input
+                type="range" id="brush-size"
+                min="5" max="100" step="1"
+                value={currentBrushSettings.size}
+                onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            </div>
+
+            {isBlurActive && (
+              <div>
+                <label htmlFor="blur-intensity" className="block text-sm font-medium text-gray-300">Blur Intensity ({currentBrushSettings.strength})</label>
+                <input
+                  type="range" id="blur-intensity"
+                  min="1" max="30" step="1"
+                  value={currentBrushSettings.strength}
+                  onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, strength: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+              </div>
+            )}
+
+            {isPixelateActive && (
+              <div>
+                <label htmlFor="pixelate-blocksize" className="block text-sm font-medium text-gray-300">Block Size ({currentBrushSettings.strength}px)</label>
+                <input
+                  type="range" id="pixelate-blocksize"
+                  min="2" max="50" step="1"
+                  value={currentBrushSettings.strength}
+                  onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, strength: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+              </div>
+            )}
+
+            <button
+              onClick={() => setBrushStrokes([])}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-md mt-4 text-sm"
+              disabled={brushStrokes.length === 0}
+            >
+              Clear All Brush Strokes
+            </button>
+          </div>
+        );
       default:
         return <div className="p-4 text-gray-400">Select a tool to see its options.</div>;
     }
   };
+
+  // handleApplyManualEffects function removed as effects are client-side and backend call is no longer made for this.
   
 
   const toolIcons: { name: ActiveTool; icon: React.ElementType, label: string }[] = [
@@ -664,6 +1150,8 @@ const App: React.FC = () => {
     { name: 'gradient', icon: GradientIcon, label: 'Gradient' },
     { name: 'logo', icon: LogoIcon, label: 'Logo' },
     { name: 'effects', icon: EffectsIcon, label: 'Effects'},
+    { name: 'blurBrush', icon: BlurBrushIcon, label: 'Blur Brush'},
+    { name: 'pixelateBrush', icon: PixelateBrushIcon, label: 'Pixelate Brush'},
   ];
 
   return (
@@ -698,15 +1186,35 @@ const App: React.FC = () => {
           ))}
         </aside>
 
-        <main className="flex-grow flex items-center justify-center p-4 bg-gray-800/50 overflow-auto">
+        <main className="flex-grow flex items-center justify-center p-4 bg-gray-800/50 overflow-auto relative">
+          {/* Main display canvas */}
           <canvas 
             ref={canvasRef} 
             className="max-w-full max-h-full shadow-2xl bg-gray-700"
-            style={{ imageRendering: 'auto' }} 
+            style={{ imageRendering: 'auto', display: 'block' }}
             aria-label="Image editing canvas"
-          >
-            Your browser does not support the canvas element.
-          </canvas>
+          />
+          {/* Interaction canvas, overlaid for drawing */}
+          <canvas
+            ref={interactionCanvasRef}
+            className="max-w-full max-h-full absolute top-0 left-0"
+            style={{
+                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
+                // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
+                // For simplicity, assuming parent 'main' is the direct positioning context.
+                // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
+                // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
+                // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
+                // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
+                // Let's assume `main` centers a stack, so they overlay.
+                zIndex: 10
+            }}
+            onMouseDown={handleInteractionMouseDown}
+            onMouseMove={handleInteractionMouseMove}
+            onMouseUp={handleInteractionMouseUp}
+            onMouseLeave={handleInteractionMouseLeave}
+            aria-label="Interaction layer for drawing regions"
+          />
         </main>
 
         <aside 
