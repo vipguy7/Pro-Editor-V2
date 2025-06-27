@@ -80,3 +80,5 @@ export const INITIAL_IMAGE_EFFECTS_SETTINGS: ImageEffectsSettings = {
 
 export const BLUE_LINE_COLOR = '#3b82f6'; 
 export const BLUE_LINE_THICKNESS_FACTOR = 0.002; 
+
+export const TEXT_EDGE_MARGIN_FACTOR = 0.02; // 2% margin from canvas edges for text

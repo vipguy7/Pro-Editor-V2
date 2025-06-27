@@ -81,7 +81,16 @@ export interface ImageEffectsSettings {
   vintage: number;    // 0-100, 0 is default (sepia intensity)
 }
 
-export type ActiveTool = 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects' | null;
+export type ActiveTool = 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects' | 'faceProcessor' | null;
+
+export interface FaceEffectSelection {
+  effect: 'none' | 'blur' | 'pixelate';
+  params: {
+    intensity?: number; // For blur
+    block_size?: number; // For pixelate
+    shape?: 'squared' | 'rounded'; // Default to squared
+  };
+}
 
 export interface HistoryEntry {
   texts: TextElement[];
@@ -89,4 +98,13 @@ export interface HistoryEntry {
   logoSettings: LogoSettings | null;
   cropSize: CropSize;
   imageEffects: ImageEffectsSettings;
+}
+
+export interface DetectedFace {
+  id: string; // or number, for selection tracking
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label?: string; // e.g., "person", "face"
 }

@@ -1,3 +1,5 @@
 ultralytics
 Pillow
 opencv-python
+Flask
+Flask-CORS

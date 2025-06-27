@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings } from './types';
-import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS } from './constants';
+import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, DetectedFace } from './types';
+import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS, TEXT_EDGE_MARGIN_FACTOR } from './constants';
 // import LoadingSpinner from './components/LoadingSpinner'; // Not used
 
 // Helper Icons (simple SVGs)
@@ -12,6 +12,12 @@ const LogoIcon: React.FC<{className?: string}> = ({className}) => <svg className
 const EffectsIcon: React.FC<{className?: string}> = ({className}) => (
   <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
     <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
+  </svg>
+);
+const FaceIcon: React.FC<{className?: string}> = ({className}) => (
+  <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM9 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm-3-3c-.83 0-1.5-.67-1.5-1.5S11.17 8 12 8s1.5.67 1.5 1.5S12.83 11 12 11z"/>
+    <path d="M12 16.5c-2.03 0-3.8.94-5.05 2.45.18.1.37.19.57.27 1.48.58 3.09.88 4.78.88s3.3-.3 4.78-.88c.2-.08.39-.17.57-.27C15.8 17.44 14.03 16.5 12 16.5z" opacity="0.5"/>
   </svg>
 );
 const BoldIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.5 3A.5.5 0 007 3.5v2.096c-2.21.384-2.94 1.152-2.94 2.232C4.06 9.06 5.38 10 7.5 10h1.388c.056.054.11.11.162.162l1.5 1.5H7.5c-1.105 0-2 .895-2 2s.895 2 2 2h2.793l-1.147 1.146a.5.5 0 10.708.708L12.5 15h.5a.5.5 0 00.5-.5v-1.586l.07-.058C15.446 11.114 16 9.84 16 8.328 16 5.522 12.478 3 7.5 3zm0 1.5c2.61 0 4.5 1.524 4.5 3.828 0 1.138-.72 2.008-2.086 2.388L9.5 10.5H7.5c-.938 0-1.44-.612-1.44-1.268 0-.774.698-1.336 1.44-1.424V4.5z" clipRule="evenodd" /></svg>;
@@ -30,6 +36,17 @@ const App: React.FC = () => {
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(texts.length > 0 ? texts[0].id : null);
   const [imageEffects, setImageEffects] = useState<ImageEffectsSettings>(INITIAL_IMAGE_EFFECTS_SETTINGS);
 
+  // New states for face detection
+  const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
+  const [isLoadingFaces, setIsLoadingFaces] = useState<boolean>(false);
+  const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
+
+  // States for face selection UI
+  const [selectedFaceEffects, setSelectedFaceEffects] = useState<Record<string, FaceEffectSelection>>({}); // Keyed by DetectedFace.id
+  const [applyEffectToAllFaces, setApplyEffectToAllFaces] = useState<FaceEffectSelection>({ effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } });
+  const [isApplyingEffects, setIsApplyingEffects] = useState<boolean>(false);
+
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const logoImageRef = useRef<HTMLImageElement | null>(null);
 
@@ -45,22 +62,8 @@ const App: React.FC = () => {
     ctx.fillStyle = '#2d3748'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (originalImage) {
-      const imgAspect = originalImage.naturalWidth / originalImage.naturalHeight;
-      const canvasAspect = canvas.width / canvas.height;
-      let drawWidth, drawHeight, offsetX, offsetY;
-
-      if (imgAspect > canvasAspect) {
-        drawHeight = canvas.height;
-        drawWidth = drawHeight * imgAspect;
-        offsetX = (canvas.width - drawWidth) / 2;
-        offsetY = 0;
-      } else {
-        drawWidth = canvas.width;
-        drawHeight = drawWidth / imgAspect;
-        offsetY = (canvas.height - drawHeight) / 2;
-        offsetX = 0;
-      }
+    if (originalImage && originalImageDimensions) { // Ensure originalImageDimensions is available
+      const { drawWidth, drawHeight, offsetX, offsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
 
       const { brightness, contrast, vintage, clarity } = imageEffects;
       const effectiveContrast = contrast + (clarity / 2); 
@@ -69,6 +72,8 @@ const App: React.FC = () => {
       ctx.filter = 'none';
 
     } else {
+        // Display placeholder if originalImage or originalImageDimensions is not yet available
+        // or if specifically no image is loaded.
         ctx.fillStyle = '#A0AEC0';
         ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
         ctx.textAlign = 'center';
@@ -116,22 +121,45 @@ const App: React.FC = () => {
       ctx.font = fontString;
       
       ctx.textAlign = textAlign;
-      ctx.textBaseline = 'middle';
+      ctx.textBaseline = 'middle'; // Affects how yPosPx is interpreted for fillText
 
-      const xPosPx = (x / 100) * canvas.width;
-      let yPosPx = (y / 100) * canvas.height;
+      const marginLeft = canvas.width * TEXT_EDGE_MARGIN_FACTOR;
+      const marginRight = canvas.width - canvas.width * TEXT_EDGE_MARGIN_FACTOR;
+      const marginTop = canvas.height * TEXT_EDGE_MARGIN_FACTOR;
+      const marginBottom = canvas.height - canvas.height * TEXT_EDGE_MARGIN_FACTOR;
+
+      // Calculate initial x and y based on percentages
+      let initialXPosPx = (x / 100) * canvas.width;
+      let initialYPosPx = (y / 100) * canvas.height;
+
+      // Determine max available width for text based on its initial X position and alignment
+      let availableWidthForText = canvas.width;
+      if (textAlign === 'left') {
+        availableWidthForText = marginRight - initialXPosPx;
+      } else if (textAlign === 'right') {
+        availableWidthForText = initialXPosPx - marginLeft;
+      } else { // center
+        availableWidthForText = Math.min(initialXPosPx - marginLeft, marginRight - initialXPosPx) * 2;
+      }
+      availableWidthForText = Math.max(0, availableWidthForText); // Ensure not negative
+
+      let constrainedMaxWidthPx;
+      if (maxWidthPercent && maxWidthPercent > 0) {
+        constrainedMaxWidthPx = Math.min((maxWidthPercent / 100) * canvas.width, availableWidthForText);
+      } else {
+        constrainedMaxWidthPx = availableWidthForText;
+      }
+      constrainedMaxWidthPx = Math.max(fontSizePx, constrainedMaxWidthPx); // Ensure at least one char can fit if possible
 
       const lines: string[] = [];
-      const actualMaxWidthPx = maxWidthPercent > 0 ? (maxWidthPercent / 100) * canvas.width : undefined;
-
-      if (actualMaxWidthPx) {
+      if (text && constrainedMaxWidthPx > 0) {
         const words = text.split(' ');
         let currentLine = words[0] || '';
         if (words.length > 1) {
             for (let i = 1; i < words.length; i++) {
                 const word = words[i];
-                const testLine = currentLine + ' ' + word;
-                if (ctx.measureText(testLine).width > actualMaxWidthPx) {
+                const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                if (ctx.measureText(testLine).width > constrainedMaxWidthPx && currentLine) {
                     lines.push(currentLine);
                     currentLine = word;
                 } else {
@@ -140,31 +168,60 @@ const App: React.FC = () => {
             }
         }
         lines.push(currentLine);
-      } else {
-        lines.push(text);
+      } else if (text) {
+        lines.push(text); // No wrapping if no constrainedMaxWidth or text is empty
       }
-      
-      const actualLineHeightPx = fontSizePx * lineHeight;
-      const totalTextHeight = (lines.length -1) * actualLineHeightPx + fontSizePx;
-      
-      yPosPx = yPosPx - totalTextHeight / 2 + fontSizePx / 2; 
 
-      if (backgroundEnabled) {
-        let maxLineWidth = 0;
-        lines.forEach(line => {
-            maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
-        });
+
+      const actualLineHeightPx = fontSizePx * lineHeight;
+      const totalTextHeight = lines.length > 0 ? (lines.length - 1) * actualLineHeightPx + fontSizePx : 0;
+      
+      // Adjust Y position: yPosPx is the baseline of the first line of text.
+      // We set textBaseline = 'middle', so fillText uses y as the vertical center.
+      // The block of text should be centered around initialYPosPx.
+      let finalYPosPx = initialYPosPx - totalTextHeight / 2 + fontSizePx / 2; // Baseline for the first line
+
+      // Clamp Y to prevent overflow, after totalTextHeight is known
+      finalYPosPx = Math.max(finalYPosPx, marginTop + totalTextHeight / 2 - fontSizePx / 2);
+      finalYPosPx = Math.min(finalYPosPx, marginBottom - totalTextHeight / 2 + fontSizePx / 2);
+
+
+      // Adjust X position based on final max line width and alignment, clamped to margins
+      let maxLineWidth = 0;
+      lines.forEach(line => {
+          maxLineWidth = Math.max(maxLineWidth, ctx.measureText(line).width);
+      });
+
+      let finalXPosPx = initialXPosPx;
+      if (textAlign === 'left') {
+        finalXPosPx = Math.max(initialXPosPx, marginLeft);
+      } else if (textAlign === 'right') {
+        finalXPosPx = Math.min(initialXPosPx, marginRight);
+      } else { // center
+        finalXPosPx = Math.max(initialXPosPx, marginLeft + maxLineWidth / 2);
+        finalXPosPx = Math.min(finalXPosPx, marginRight - maxLineWidth / 2);
+      }
+
+
+      if (backgroundEnabled && lines.length > 0) {
         const bgWidth = maxLineWidth + backgroundPaddingX * 2;
         const bgHeight = totalTextHeight + backgroundPaddingY * 2;
         
-        let bgX = xPosPx;
-        if (textAlign === 'center') bgX = xPosPx - bgWidth / 2;
-        else if (textAlign === 'right') bgX = xPosPx - bgWidth;
+        let bgX = finalXPosPx; // Default for left align
+        if (textAlign === 'center') bgX = finalXPosPx - maxLineWidth / 2; // Center point is finalXPosPx
+        else if (textAlign === 'right') bgX = finalXPosPx - maxLineWidth; // Right edge is finalXPosPx
         
-        const bgY = yPosPx - fontSizePx / 2 - backgroundPaddingY; 
+        bgX -= backgroundPaddingX; // Adjust for padding
+        const bgY = finalYPosPx - fontSizePx / 2 - backgroundPaddingY; // finalYPosPx is baseline of first line.
 
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(bgX, bgY, bgWidth, bgHeight);
+        // Clamp background drawing to canvas boundaries as well, though ideally text clamping handles most of this.
+        // This is a simplified clamping for bg; more precise would involve checking all 4 bg corners.
+        const clampedBgX = Math.max(0, bgX);
+        const clampedBgY = Math.max(0, bgY);
+        const clampedBgWidth = Math.min(bgWidth, canvas.width - clampedBgX);
+        const clampedBgHeight = Math.min(bgHeight, canvas.height - clampedBgY);
+        ctx.fillRect(clampedBgX, clampedBgY, clampedBgWidth, clampedBgHeight);
       }
       
       const originalShadowOffsetX = ctx.shadowOffsetX;
@@ -177,7 +234,7 @@ const App: React.FC = () => {
 
 
       lines.forEach((line, index) => {
-        const currentLineY = yPosPx + (index * actualLineHeightPx);
+        const currentLineY = finalYPosPx + (index * actualLineHeightPx); // Use finalYPosPx
         
         if (shadowEnabled) {
           ctx.shadowOffsetX = shadowOffsetX;
@@ -274,7 +331,89 @@ const App: React.FC = () => {
       ctx.fillRect(lineX, lineY, lineLength, lineThickness);
     }
 
-  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects]);
+    // Draw detected face boxes
+    if (originalImage && originalImageDimensions && detectedFaces.length > 0) {
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
+
+      const scaleX = imgDrawWidth / originalImageDimensions.width;
+      const scaleY = imgDrawHeight / originalImageDimensions.height;
+
+      detectedFaces.forEach((face, index) => {
+        const canvasX = imgOffsetX + face.x * scaleX;
+        const canvasY = imgOffsetY + face.y * scaleY;
+        const canvasWidth = face.width * scaleX;
+        const canvasHeight = face.height * scaleY;
+
+        ctx.strokeStyle = 'rgba(0, 255, 0, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+
+        // Draw number
+        const textContent = `${index + 1}`;
+        ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
+        const fontSize = Math.max(12, Math.min(canvasWidth / 4, canvasHeight / 4));
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        const textMetrics = ctx.measureText(textContent);
+        const textBgPadding = fontSize * 0.2;
+        ctx.fillRect(canvasX, canvasY, textMetrics.width + textBgPadding * 2, fontSize + textBgPadding * 2);
+
+        ctx.fillStyle = 'black';
+        ctx.fillText(textContent, canvasX + textBgPadding, canvasY + textBgPadding);
+      });
+    }
+
+    // Loading indicator for face detection
+    if (isLoadingFaces) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Detecting Faces...', canvas.width / 2, canvas.height / 2);
+    }
+
+    // Loading indicator for applying effects
+    if (isApplyingEffects) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
+    }
+
+
+  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, detectedFaces, isLoadingFaces, originalImageDimensions, isApplyingEffects]);
+
+  // Helper function to calculate image drawing parameters (to avoid repetition)
+  const calculateImageDrawParams = (
+    currentOriginalImage: HTMLImageElement,
+    currentCanvas: HTMLCanvasElement,
+    currentOriginalImageDimensions: {width: number, height: number}
+  ) => {
+      const imgAspect = currentOriginalImageDimensions.width / currentOriginalImageDimensions.height;
+      const canvasAspect = currentCanvas.width / currentCanvas.height;
+      let drawWidth, drawHeight, offsetX, offsetY;
+
+      if (imgAspect > canvasAspect) {
+        drawHeight = currentCanvas.height;
+        drawWidth = drawHeight * imgAspect;
+        offsetX = (currentCanvas.width - drawWidth) / 2;
+        offsetY = 0;
+      } else {
+        drawWidth = currentCanvas.width;
+        drawHeight = drawWidth / imgAspect;
+        offsetY = (currentCanvas.height - drawHeight) / 2;
+        offsetX = 0;
+      }
+      return { drawWidth, drawHeight, offsetX, offsetY };
+  };
+
 
   useEffect(() => {
     redrawCanvas();
@@ -283,16 +422,50 @@ const App: React.FC = () => {
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
+      setImageFileName(file.name.substring(0, file.name.lastIndexOf('.')) + '_edited.png');
+      setDetectedFaces([]); // Clear previous faces
+
       const reader = new FileReader();
       reader.onload = (e) => {
+        const imgSrc = e.target?.result as string;
         const img = new Image();
         img.onload = () => {
           setOriginalImage(img);
+          setOriginalImageDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+
+          // --- Mock API call for face detection ---
+          setIsLoadingFaces(true);
+          console.log("Simulating API call to /api/detect_faces with image data...");
+
+          // Simulate sending 'file' to backend. In a real scenario:
+          // const formData = new FormData();
+          // formData.append('file', file);
+          // fetch('/api/detect_faces', { method: 'POST', body: formData })
+          //  .then(res => res.json())
+          //  .then(data => { ... });
+
+          setTimeout(() => {
+            // Mock response based on a sample image or predefined boxes
+            // These coordinates are relative to original image dimensions
+            const mockFaces: DetectedFace[] = [
+              { id: 'face-0', x: img.naturalWidth * 0.15, y: img.naturalHeight * 0.2, width: img.naturalWidth * 0.2, height: img.naturalHeight * 0.25, label: 'person' },
+              { id: 'face-1', x: img.naturalWidth * 0.6, y: img.naturalHeight * 0.3, width: img.naturalWidth * 0.15, height: img.naturalHeight * 0.2, label: 'person' },
+            ];
+
+            // Simulate a case where no faces are detected for certain images (e.g. based on filename)
+            if (file.name.includes("noface")) {
+                 setDetectedFaces([]);
+                 console.log("Mock API: No faces detected for", file.name);
+            } else {
+                 setDetectedFaces(mockFaces);
+                 console.log("Mock API: Detected faces", mockFaces);
+            }
+            setIsLoadingFaces(false);
+          }, 1500); // Simulate network delay
         };
-        img.src = e.target?.result as string;
+        img.src = imgSrc;
       };
       reader.readAsDataURL(file);
-      setImageFileName(file.name.substring(0, file.name.lastIndexOf('.')) + '_edited.png');
     }
   };
   
@@ -654,7 +827,232 @@ const App: React.FC = () => {
         );
       default:
         return <div className="p-4 text-gray-400">Select a tool to see its options.</div>;
+      case 'faceProcessor':
+        if (!originalImage) {
+          return <div className="p-4 text-gray-400">Upload an image to use face tools.</div>;
+        }
+        if (isLoadingFaces) {
+          return <div className="p-4 text-gray-400">Detecting faces... Please wait.</div>;
+        }
+        if (detectedFaces.length === 0) {
+          return <div className="p-4 text-gray-400">No faces detected in the image.</div>;
+        }
+
+        const handleAllFacesEffectChange = (effect: 'none' | 'blur' | 'pixelate') => {
+          setApplyEffectToAllFaces(prev => ({ ...prev, effect }));
+        };
+        const handleAllFacesParamChange = (param: string, value: number | string) => {
+          setApplyEffectToAllFaces(prev => ({ ...prev, params: { ...prev.params, [param]: value } }));
+        };
+
+        const handleFaceEffectChange = (faceId: string, effect: 'none' | 'blur' | 'pixelate') => {
+          setSelectedFaceEffects(prev => ({
+            ...prev,
+            [faceId]: {
+              ...(prev[faceId] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } }),
+              effect: effect,
+            }
+          }));
+        };
+        const handleFaceParamChange = (faceId: string, param: string, value: number | string) => {
+          setSelectedFaceEffects(prev => ({
+            ...prev,
+            [faceId]: {
+              ...(prev[faceId] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } }),
+              params: {
+                ...(prev[faceId]?.params || { intensity: 10, block_size: 10, shape: 'squared' }),
+                [param]: value,
+              }
+            }
+          }));
+        };
+
+        return (
+          <div className="space-y-4 p-4">
+            <h3 className="text-lg font-semibold text-blue-300">Face Effects</h3>
+
+            {/* Apply to All Faces Section */}
+            <fieldset className="space-y-2 border border-gray-600 p-3 rounded-md">
+              <legend className="text-sm font-medium text-blue-400 px-1">Apply to All Detected Faces</legend>
+              <select
+                value={applyEffectToAllFaces.effect}
+                onChange={(e) => handleAllFacesEffectChange(e.target.value as 'none'|'blur'|'pixelate')}
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+              >
+                <option value="none">None</option>
+                <option value="blur">Blur All</option>
+                <option value="pixelate">Pixelate All</option>
+              </select>
+
+              {applyEffectToAllFaces.effect === 'blur' && (
+                <div className="mt-2 space-y-1">
+                  <label htmlFor="all-blur-intensity" className="block text-sm font-medium text-gray-300">Blur Intensity</label>
+                  <input type="range" id="all-blur-intensity" min="1" max="50" step="1" value={applyEffectToAllFaces.params.intensity || 10} onChange={(e) => handleAllFacesParamChange('intensity', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                  <label htmlFor="all-blur-shape" className="block text-sm font-medium text-gray-300">Shape</label>
+                  <select value={applyEffectToAllFaces.params.shape || 'squared'} onChange={e => handleAllFacesParamChange('shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
+                    <option value="squared">Squared</option>
+                    <option value="rounded">Rounded</option>
+                  </select>
+                </div>
+              )}
+              {applyEffectToAllFaces.effect === 'pixelate' && (
+                <div className="mt-2 space-y-1">
+                  <label htmlFor="all-pixelate-blocksize" className="block text-sm font-medium text-gray-300">Pixelation Block Size</label>
+                  <input type="range" id="all-pixelate-blocksize" min="2" max="50" step="1" value={applyEffectToAllFaces.params.block_size || 10} onChange={(e) => handleAllFacesParamChange('block_size', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                  <label htmlFor="all-pixelate-shape" className="block text-sm font-medium text-gray-300">Shape</label>
+                  <select value={applyEffectToAllFaces.params.shape || 'squared'} onChange={e => handleAllFacesParamChange('shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
+                    <option value="squared">Squared</option>
+                    <option value="rounded">Rounded</option>
+                  </select>
+                </div>
+              )}
+            </fieldset>
+
+            {/* Individual Faces Section */}
+            <h4 className="text-md font-semibold text-blue-300 pt-2">Individual Faces</h4>
+            {detectedFaces.map((face, index) => {
+              const currentFaceEffect = selectedFaceEffects[face.id] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } };
+              return (
+                <fieldset key={face.id} className="space-y-1 border border-gray-600 p-3 rounded-md">
+                  <legend className="text-sm font-medium text-blue-400 px-1">Face {index + 1}</legend>
+                  <select
+                    value={currentFaceEffect.effect}
+                    onChange={(e) => handleFaceEffectChange(face.id, e.target.value as 'none'|'blur'|'pixelate')}
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+                    disabled={applyEffectToAllFaces.effect !== 'none'} // Disable if "all faces" is active
+                  >
+                    <option value="none">None</option>
+                    <option value="blur">Blur</option>
+                    <option value="pixelate">Pixelate</option>
+                  </select>
+
+                  {currentFaceEffect.effect === 'blur' && (
+                    <div className="mt-2 space-y-1">
+                      <label htmlFor={`face-${face.id}-blur-intensity`} className="block text-sm font-medium text-gray-300">Intensity</label>
+                      <input type="range" id={`face-${face.id}-blur-intensity`} min="1" max="50" step="1" value={currentFaceEffect.params.intensity || 10} onChange={(e) => handleFaceParamChange(face.id, 'intensity', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={applyEffectToAllFaces.effect !== 'none'} />
+                      <label htmlFor={`face-${face.id}-blur-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
+                      <select value={currentFaceEffect.params.shape || 'squared'} onChange={e => handleFaceParamChange(face.id, 'shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs" disabled={applyEffectToAllFaces.effect !== 'none'}>
+                        <option value="squared">Squared</option>
+                        <option value="rounded">Rounded</option>
+                      </select>
+                    </div>
+                  )}
+                  {currentFaceEffect.effect === 'pixelate' && (
+                    <div className="mt-2 space-y-1">
+                      <label htmlFor={`face-${face.id}-pixelate-blocksize`} className="block text-sm font-medium text-gray-300">Block Size</label>
+                      <input type="range" id={`face-${face.id}-pixelate-blocksize`} min="2" max="50" step="1" value={currentFaceEffect.params.block_size || 10} onChange={(e) => handleFaceParamChange(face.id, 'block_size', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={applyEffectToAllFaces.effect !== 'none'} />
+                      <label htmlFor={`face-${face.id}-pixelate-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
+                      <select value={currentFaceEffect.params.shape || 'squared'} onChange={e => handleFaceParamChange(face.id, 'shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs" disabled={applyEffectToAllFaces.effect !== 'none'}>
+                        <option value="squared">Squared</option>
+                        <option value="rounded">Rounded</option>
+                      </select>
+                    </div>
+                  )}
+                </fieldset>
+              )
+            })}
+
+            <button
+              onClick={handleApplyFaceEffects}
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md mt-4 disabled:opacity-50"
+              disabled={isLoadingFaces || isApplyingEffects || !originalImage || detectedFaces.length === 0 || (applyEffectToAllFaces.effect === 'none' && Object.values(selectedFaceEffects).every(sfe => sfe.effect === 'none'))}
+            >
+              {isApplyingEffects ? 'Applying...' : 'Apply Face Effects'}
+            </button>
+          </div>
+        );
+
+      default:
+        return <div className="p-4 text-gray-400">Select a tool to see its options.</div>;
     }
+  };
+
+  const handleApplyFaceEffects = async () => {
+    if (!originalImage || !imageFileName || !originalImageDimensions) {
+      console.error("Cannot apply effects: Original image data missing.");
+      return;
+    }
+
+    setIsApplyingEffects(true);
+
+    const selectionsPayload: { index: number; effect: string; params: any }[] = [];
+
+    if (applyEffectToAllFaces.effect !== 'none') {
+      detectedFaces.forEach((face, index) => {
+        selectionsPayload.push({
+          index: index, // Assuming backend maps index to detected_faces order
+          effect: applyEffectToAllFaces.effect,
+          params: { ...applyEffectToAllFaces.params }
+        });
+      });
+    } else {
+      detectedFaces.forEach((face, index) => {
+        const effectSelection = selectedFaceEffects[face.id];
+        if (effectSelection && effectSelection.effect !== 'none') {
+          selectionsPayload.push({
+            index: index,
+            effect: effectSelection.effect,
+            params: { ...effectSelection.params }
+          });
+        }
+      });
+    }
+
+    if (selectionsPayload.length === 0) {
+      console.log("No effects selected to apply.");
+      setIsApplyingEffects(false);
+      return;
+    }
+
+    // This is what would be sent to the backend.
+    // The backend's /api/apply_effects expects:
+    // { image_filename: string, selections: [], detected_boxes: [] }
+    // The `detected_boxes` are the original boxes from the detection step.
+    const payload = {
+      image_filename: imageFileName, // Assuming imageFileName is a unique ID the backend can use
+      selections: selectionsPayload,
+      detected_boxes: detectedFaces.map(f => ({x: f.x, y: f.y, width: f.width, height: f.height, label: f.label})), // Send original boxes
+    };
+
+    console.log("Simulating API call to /api/apply_effects with payload:", JSON.stringify(payload, null, 2));
+
+    // --- Mock API call for applying effects ---
+    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
+
+    // Mock response: In a real scenario, this would be a new image blob/URL
+    // For this mock, we'll simulate the image being processed by:
+    // 1. Creating a new image object (could be the same originalImage.src for simplicity in mock)
+    // 2. Clearing detected faces and selections as the "effects are now part of the image"
+
+    console.log("Mock API: Effects applied. Frontend would now receive and display the new image.");
+
+    // To visually represent that something happened in the mock:
+    // Option A: Draw red boxes where effects were applied (more complex for mock)
+    // Option B: Simple: Just clear the selection states and detected faces, load the "new" image.
+    // For now, we'll just clear states and "reload" the original image as if it's the processed one.
+
+    const newProcessedImage = new Image();
+    newProcessedImage.onload = () => {
+      setOriginalImage(newProcessedImage); // This would be the new image from backend
+      setDetectedFaces([]); // Clear faces as they are now "baked" into the image
+      setSelectedFaceEffects({});
+      setApplyEffectToAllFaces({ effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } });
+      // The title of the image could also be updated e.g. append "_processed_faces"
+      // setImageFileName(prev => prev.replace('_edited', '_edited_faces_processed'));
+      setIsApplyingEffects(false);
+      setActiveTool(null); // Close the tool panel
+      alert("Mock: Face effects applied! The image displayed is notionally the processed one.");
+    };
+    newProcessedImage.onerror = () => {
+        console.error("Mock: Error loading the 'processed' image.");
+        setIsApplyingEffects(false);
+        alert("Mock: Error applying effects (simulated image load error).");
+    }
+    // In a real scenario, the src would be the URL of the image returned by the backend
+    // For the mock, we re-use the original image's src.
+    newProcessedImage.src = originalImage.src;
+
+
   };
   
 
@@ -664,6 +1062,7 @@ const App: React.FC = () => {
     { name: 'gradient', icon: GradientIcon, label: 'Gradient' },
     { name: 'logo', icon: LogoIcon, label: 'Logo' },
     { name: 'effects', icon: EffectsIcon, label: 'Effects'},
+    { name: 'faceProcessor', icon: FaceIcon, label: 'Faces'},
   ];
 
   return (
