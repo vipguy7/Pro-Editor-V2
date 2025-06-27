@@ -1,73 +1,15 @@
 import cv2 # For pixelation and potentially other image ops
 import numpy as np # For image manipulation
 import json # For printing metadata
-from ultralytics import YOLO
+# from ultralytics import YOLO # No longer needed
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
-def detect_faces(image_path: str) -> list[dict[str, int]]:
+# detect_faces function is removed as per new plan.
+
+def draw_overlay_on_image(image_path_or_pil_image, regions_to_draw: list[dict[str, int]]):
     """
-    Detects faces in an image using YOLOv8.
-
-    Args:
-        image_path: Path to the input image.
-
-    Returns:
-        A list of dictionaries, where each dictionary contains the
-        bounding box coordinates (x, y, width, height) for a detected face.
-    """
-    try:
-        # Try to open PIL image first, in case image_path is actually a PIL image object
-        if isinstance(image_path, Image.Image):
-            img = image_path
-        else:
-            img = Image.open(image_path)
-    except FileNotFoundError:
-        print(f"Error: Image file not found at {image_path}")
-        return []
-    except Exception as e:
-        print(f"Error opening image: {e}")
-        return []
-
-    # Load a standard YOLOv8 model (e.g., yolov8n.pt)
-    # This model is for general object detection. We will filter for 'person' class (ID 0).
-    model_name = "yolov8n.pt"
-    try:
-        # print(f"Loading YOLO model: {model_name} (this may trigger a download)")
-        model = YOLO(model_name)
-        # print(f"YOLO model {model_name} loaded successfully.")
-    except Exception as e:
-        print(f"Error loading YOLO model '{model_name}': {e}")
-        return []
-
-    # Perform detection
-    try:
-        # We are looking for class 0 (person)
-        results = model(img, classes=[0], verbose=False)
-    except Exception as e:
-        print(f"Error during person detection: {e}")
-        return []
-
-    detected_persons = []
-    for result in results:
-        boxes = result.boxes
-        for box in boxes:
-            class_id = int(box.cls[0].cpu().numpy()) if box.cls is not None else -1
-            if class_id == 0:
-                xyxy = box.xyxy[0].cpu().numpy()
-                x_min, y_min, x_max, y_max = int(xyxy[0]), int(xyxy[1]), int(xyxy[2]), int(xyxy[3])
-                person_bbox = {
-                    "x": x_min, "y": y_min,
-                    "width": x_max - x_min, "height": y_max - y_min,
-                    "label": "person"
-                }
-                detected_persons.append(person_bbox)
-    # print(f"Returning {len(detected_persons)} 'person' bounding boxes as face proxies.")
-    return detected_persons
-
-
-def draw_overlay_on_image(image_path_or_pil_image, detected_boxes: list[dict[str, int]]):
-    """
-    Draws semi-transparent rectangles and numbers over detected faces/persons.
+    Draws semi-transparent rectangles and numbers over specified regions.
+    This function might be used for debugging or if the frontend needs an image with overlays.
     """
     try:
         if isinstance(image_path_or_pil_image, str):
@@ -83,19 +25,27 @@ def draw_overlay_on_image(image_path_or_pil_image, detected_boxes: list[dict[str
         print(f"Error opening or converting image: {e}")
         return None
 
-    if not detected_boxes:
-        # print("No boxes provided to draw.")
+    if not regions_to_draw:
+        # print("No regions provided to draw.")
         return img.convert("RGB")
 
     overlay_img = Image.new("RGBA", img.size, (255, 255, 255, 0))
     draw = ImageDraw.Draw(overlay_img)
 
-    for i, box_data in enumerate(detected_boxes):
+    for i, box_data in enumerate(regions_to_draw):
         x, y, w, h = box_data["x"], box_data["y"], box_data["width"], box_data["height"]
-        rectangle_color = (0, 100, 255, 100)
+        label = box_data.get("label", "Region") # Get label if provided
+
+        rectangle_color = (0, 100, 255, 100) # Default blueish
+        if "effect" in box_data: # Could color based on effect for debugging
+            if box_data["effect"] == "blur":
+                rectangle_color = (255, 165, 0, 100) # Orange for blur
+            elif box_data["effect"] == "pixelate":
+                rectangle_color = (0, 255, 0, 100) # Green for pixelate
+
         draw.rectangle([x, y, x + w, y + h], outline="blue", fill=rectangle_color, width=2)
 
-        text_content = str(i + 1)
+        text_content = f"{label} {i + 1}"
         text_position = (x + 5, y + 5)
         try:
             font_size = max(15, int(h / 10))
@@ -103,14 +53,15 @@ def draw_overlay_on_image(image_path_or_pil_image, detected_boxes: list[dict[str
                 font = ImageFont.truetype("arial.ttf", font_size)
             except IOError:
                 font = ImageFont.load_default()
-                if font_size > 15 :
+                if font_size > 15 : # Default font is small, adjust position
                      text_position = (x + 2, y + 2)
             text_bbox = draw.textbbox(text_position, text_content, font=font)
             text_bg_color = (255, 255, 255, 180)
             draw.rectangle(text_bbox, fill=text_bg_color)
             draw.text(text_position, text_content, fill="black", font=font)
         except Exception as e_font:
-            print(f"Warning: Could not draw text for box {i+1} due to font error: {e_font}")
+            print(f"Warning: Could not draw text for region {i+1} due to font error: {e_font}")
+            # Draw simple small red square if text fails
             draw.rectangle([x, y, x+10, y+10], fill="red")
 
     img = Image.alpha_composite(img, overlay_img)
@@ -190,13 +141,12 @@ def apply_sticker(image: Image.Image, x: int, y: int, width: int, height: int,
 
 
 # --- Main processing function ---
-def process_selected_faces(
+def process_manual_regions(
     image_path_or_pil_image,
-    detected_boxes: list[dict],
-    selections: list[dict]
+    user_regions_with_effects: list[dict] # Expects list of {x, y, width, height, effect, params}
 ) -> tuple[Image.Image | None, dict[str, any]]:
     """
-    Applies blurring, pixelation, or stickers to selected faces in an image.
+    Applies blurring, pixelation, or stickers to user-defined regions in an image.
     """
     try:
         if isinstance(image_path_or_pil_image, str):
@@ -212,139 +162,132 @@ def process_selected_faces(
     output_image = current_image.copy()
     metadata = {
         "original_image_size": {"width": current_image.width, "height": current_image.height},
-        "detected_faces_count": len(detected_boxes),
-        "processed_faces": [],
-        "all_detected_boxes": detected_boxes
+        "processed_regions_count": len(user_regions_with_effects),
+        "processed_regions_details": []
     }
-    selections.sort(key=lambda s: s.get("index", -1))
+    # user_regions_with_effects are already sorted/ordered by user if needed, or processed as received.
 
-    for sel in selections:
-        box_index = sel.get("index")
-        effect_type = sel.get("type")
-        shape = sel.get("shape", "squared")
+    for i, region_data in enumerate(user_regions_with_effects):
+        x = region_data.get("x")
+        y = region_data.get("y")
+        w = region_data.get("width")
+        h = region_data.get("height")
+        effect_type = region_data.get("effect") # 'effect' instead of 'type' from frontend
+        params = region_data.get("params", {})
+        shape = params.get("shape", "squared") # Get shape from params if available
 
-        if box_index is None or not (0 <= box_index < len(detected_boxes)):
-            print(f"Warning: Invalid box index {box_index} in selection. Skipping.")
+        if None in [x, y, w, h, effect_type]:
+            print(f"Warning: Invalid region data for region index {i}. Skipping. Data: {region_data}")
             continue
 
-        box = detected_boxes[box_index]
-        x, y, w, h = box["x"], box["y"], box["width"], box["height"]
-        effect_params = {}
+        effect_log_params = {}
 
         if effect_type == "blur":
-            intensity = sel.get("intensity", 10)
+            intensity = params.get("intensity", 10)
             output_image = apply_gaussian_blur(output_image, x, y, w, h, intensity, shape)
-            effect_params = {"intensity": intensity, "shape": shape}
+            effect_log_params = {"intensity": intensity, "shape": shape}
         elif effect_type == "pixelate":
-            block_size = sel.get("block_size", 10)
+            block_size = params.get("block_size", 10) # block_size from params
             output_image = apply_pixelation(output_image, x, y, w, h, block_size, shape)
-            effect_params = {"block_size": block_size, "shape": shape}
+            effect_log_params = {"block_size": block_size, "shape": shape}
         elif effect_type == "sticker":
-            sticker_id = sel.get("sticker_id", "default_sticker.png") # Expects a path or an identifier
-            # In a real app, sticker_id might map to a preloaded image or a path.
-            # For this example, apply_sticker handles a path or makes a default if path is bad.
+            sticker_id = params.get("sticker_id", "default_sticker.png")
             output_image = apply_sticker(output_image, x, y, w, h, sticker_id)
-            effect_params = {"sticker_id": sticker_id} # Log which sticker was intended
+            effect_log_params = {"sticker_id": sticker_id}
+        elif effect_type == "none": # Explicitly handle 'none' if sent
+            print(f"Info: Region index {i} has effect 'none'. Skipping processing for this region.")
+            continue
         else:
-            print(f"Warning: Unknown effect type '{effect_type}' for box index {box_index}. Skipping.")
+            print(f"Warning: Unknown effect type '{effect_type}' for region index {i}. Skipping.")
             continue
 
-        metadata["processed_faces"].append({
-            "original_box_index": box_index,
-            "coordinates": box,
+        metadata["processed_regions_details"].append({
+            "region_index": i,
+            "coordinates": {"x": x, "y": y, "width": w, "height": h},
             "effect_applied": effect_type,
-            "parameters": effect_params
+            "parameters": effect_log_params
         })
     return output_image, metadata
 
-# --- Main execution for testing ---
+# --- Main execution for testing (updated for manual regions) ---
 if __name__ == "__main__":
     sample_image_filename = "sample.jpg"
-    overlay_output_filename = "sample_with_overlay.jpg"
-    processed_output_filename = "sample_processed.jpg"
+    # overlay_output_filename = "sample_with_overlay.jpg" # Overlay test can be separate
+    processed_output_filename = "sample_processed_manual.jpg"
 
     # Create/load dummy sample image
     try:
-        current_img = Image.open(sample_image_filename)
-        # print(f"Using existing '{sample_image_filename}' for testing.")
+        current_img = Image.open(sample_image_filename).convert("RGB")
     except FileNotFoundError:
-        # print(f"Creating a dummy '{sample_image_filename}' for testing.")
         current_img = Image.new("RGB", (800, 600), color="lightgray")
         draw_on_current = ImageDraw.Draw(current_img)
-        draw_on_current.rectangle([100, 100, 200, 300], fill="lightblue", outline="black")
-        draw_on_current.rectangle([300, 150, 400, 400], fill="lightgreen", outline="black")
+        draw_on_current.rectangle([100, 100, 200, 300], fill="lightblue", outline="black") # Object 1
+        draw_on_current.rectangle([300, 150, 400, 400], fill="lightgreen", outline="black") # Object 2
+        draw_on_current.rectangle([500, 50, 700, 250], fill="pink", outline="black") # Object 3
         try:
             font = ImageFont.truetype("arial.ttf", 40)
         except IOError:
             font = ImageFont.load_default()
         draw_on_current.text((50, 50), "Sample Test Image", fill="black", font=font)
         current_img.save(sample_image_filename)
-        # print(f"Dummy '{sample_image_filename}' created.")
 
-    # Test face detection (will likely find 0 in dummy image)
-    # print(f"\nAttempting to detect persons in '{sample_image_filename}'...")
-    persons_detected = detect_faces(sample_image_filename) # Pass filename
-    # if persons_detected:
-    #     print(f"Detected {len(persons_detected)} 'person(s)'.")
-    # else:
-    #     print("No persons detected.")
+    # Test process_manual_regions
+    print("\n--- Testing process_manual_regions ---")
 
-    # Test overlay drawing with predefined boxes
-    # print("\n--- Testing overlay drawing with predefined boxes ---")
-    predefined_boxes = [
-        {"x": 50, "y": 50, "width": 150, "height": 200, "label": "predefined1"},
-        {"x": 250, "y": 100, "width": 100, "height": 120, "label": "predefined2"},
-        {"x": 400, "y": 200, "width": 200, "height": 150, "label": "predefined3"}
-    ]
-    image_with_predefined_overlays = draw_overlay_on_image(current_img.copy(), predefined_boxes)
-    if image_with_predefined_overlays:
-        predefined_overlay_filename = "sample_with_predefined_overlays.jpg"
-        image_with_predefined_overlays.save(predefined_overlay_filename)
-        # print(f"Image with PREDEFINED overlays saved to '{predefined_overlay_filename}'")
-
-    # Test process_selected_faces
-    # print("\n--- Testing process_selected_faces ---")
-    user_selections = [
-        {"index": 0, "type": "blur", "intensity": 15, "shape": "rounded"},
-        {"index": 1, "type": "pixelate", "block_size": 20, "shape": "squared"},
-        {"index": 2, "type": "blur", "intensity": 5, "shape": "squared"},
-        {"index": 0, "type": "pixelate", "block_size": 8, "shape": "squared"}, # Overwrites previous on index 0
-        {"index": 99, "type": "blur"}, # Invalid index
-        {"index": 1, "type": "unknown_effect"}, # Invalid effect
+    # Simulate regions and effects defined by a user on the frontend
+    user_defined_regions_and_effects = [
         {
-            "index": 2, "type": "sticker", "sticker_id": "non_existent_sticker.png"
-            # This will cause apply_sticker to use its default yellow circle.
-            # This also overwrites the blur previously applied to index 2.
-        }
+            "x": 100, "y": 100, "width": 100, "height": 200, # Corresponds to Object 1
+            "effect": "blur",
+            "params": {"intensity": 20, "shape": "rounded"}
+        },
+        {
+            "x": 300, "y": 150, "width": 100, "height": 250, # Corresponds to Object 2
+            "effect": "pixelate",
+            "params": {"block_size": 15, "shape": "squared"}
+        },
+        {
+            "x": 500, "y": 50, "width": 200, "height": 200, # Corresponds to Object 3
+            "effect": "sticker",
+            "params": {"sticker_id": "non_existent_sticker.png"} # Will use default sticker
+        },
+        {
+            "x": 10, "y": 10, "width": 50, "height": 50,
+            "effect": "none" # Should be skipped
+        },
+        { # Invalid effect type
+            "x": 600, "y": 400, "width": 50, "height": 50,
+            "effect": "unknown_effect",
+            "params": {}
+        },
     ]
 
-    processed_image, metadata = process_selected_faces(
-        current_img.copy(), # Use a fresh copy of the loaded/created image
-        predefined_boxes,
-        user_selections
+    processed_image, metadata = process_manual_regions(
+        current_img.copy(),
+        user_defined_regions_and_effects
     )
 
     if processed_image and metadata:
         processed_image.save(processed_output_filename)
-        print(f"\nProcessed image saved to '{processed_output_filename}'")
+        print(f"\nProcessed image with manual regions saved to '{processed_output_filename}'")
         print("\nProcessing Metadata:")
         print(json.dumps(metadata, indent=2))
-        # Check for warnings from invalid selections
-        # Expected operations:
-        # 1. index 0 blur (overwritten)
-        # 2. index 1 pixelate
-        # 3. index 2 blur (overwritten)
-        # 4. index 0 pixelate (final for index 0)
-        # 5. index 2 sticker (final for index 2)
-        # Total 5 logged operations.
-        expected_ops_count = 5
-        if len(metadata["processed_faces"]) == expected_ops_count:
+
+        expected_ops_count = 3 # blur, pixelate, sticker
+        if len(metadata["processed_regions_details"]) == expected_ops_count:
              print(f"\nCorrect number of operations processed ({expected_ops_count}).")
         else:
-             print(f"\nWarning: Expected {expected_ops_count} processed operations, got {len(metadata['processed_faces'])}")
-
+             print(f"\nWarning: Expected {expected_ops_count} processed operations, got {len(metadata['processed_regions_details'])}")
     else:
-        print("\nFailed to process selected faces.")
+        print("\nFailed to process manual regions.")
+
+    # Test overlay drawing with the same manual regions for visualization
+    overlay_output_filename = "sample_with_manual_overlays.jpg"
+    image_with_manual_overlays = draw_overlay_on_image(current_img.copy(), user_defined_regions_and_effects)
+    if image_with_manual_overlays:
+        image_with_manual_overlays.save(overlay_output_filename)
+        print(f"Image with visual MANUAL region overlays saved to '{overlay_output_filename}'")
+
 
     print("\n--- Main test block finished ---")
-    print(f"Please visually inspect '{predefined_overlay_filename}' and '{processed_output_filename}'.")
+    print(f"Please visually inspect '{overlay_output_filename}' and '{processed_output_filename}'.")

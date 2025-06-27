@@ -81,15 +81,23 @@ export interface ImageEffectsSettings {
   vintage: number;    // 0-100, 0 is default (sepia intensity)
 }
 
-export type ActiveTool = 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects' | 'faceProcessor' | null;
+export type ActiveTool = 'crop' | 'text' | 'gradient' | 'logo' | 'enhance' | 'effects' | 'regionSelector' | null;
 
-export interface FaceEffectSelection {
-  effect: 'none' | 'blur' | 'pixelate';
-  params: {
-    intensity?: number; // For blur
-    block_size?: number; // For pixelate
-    shape?: 'squared' | 'rounded'; // Default to squared
-  };
+export interface EffectParams {
+  intensity?: number; // For blur
+  block_size?: number; // For pixelate
+  shape?: 'squared' | 'rounded'; // Default to squared
+  // Could add sticker_id here if sticker functionality is kept for manual regions
+}
+
+export interface ManualRegion {
+  id: string;
+  x: number;         // Relative to original image
+  y: number;         // Relative to original image
+  width: number;     // Relative to original image
+  height: number;    // Relative to original image
+  effect: 'none' | 'blur' | 'pixelate'; // Add 'sticker' if needed
+  params: EffectParams;
 }
 
 export interface HistoryEntry {
@@ -98,13 +106,7 @@ export interface HistoryEntry {
   logoSettings: LogoSettings | null;
   cropSize: CropSize;
   imageEffects: ImageEffectsSettings;
+  manualRegions?: ManualRegion[]; // Add manual regions to history
 }
 
-export interface DetectedFace {
-  id: string; // or number, for selection tracking
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  label?: string; // e.g., "person", "face"
-}
+// DetectedFace and FaceEffectSelection have been removed.

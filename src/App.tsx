@@ -2,6 +2,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, DetectedFace } from './types';
 import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS, TEXT_EDGE_MARGIN_FACTOR } from './constants';
+import { ManualRegion } from './types'; // Added ManualRegion
+
 // import LoadingSpinner from './components/LoadingSpinner'; // Not used
 
 // Helper Icons (simple SVGs)
@@ -14,12 +16,18 @@ const EffectsIcon: React.FC<{className?: string}> = ({className}) => (
     <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
   </svg>
 );
-const FaceIcon: React.FC<{className?: string}> = ({className}) => (
-  <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zM9 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm-3-3c-.83 0-1.5-.67-1.5-1.5S11.17 8 12 8s1.5.67 1.5 1.5S12.83 11 12 11z"/>
-    <path d="M12 16.5c-2.03 0-3.8.94-5.05 2.45.18.1.37.19.57.27 1.48.58 3.09.88 4.78.88s3.3-.3 4.78-.88c.2-.08.39-.17.57-.27C15.8 17.44 14.03 16.5 12 16.5z" opacity="0.5"/>
+// FaceIcon is no longer used.
+const RegionSelectIcon: React.FC<{className?: string}> = ({className}) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 3h7v7H3z"></path>
+    <path d="M14 14h7v7h-7z"></path>
+    <path d="M14 3h7v2h-7z"></path>
+    <path d="M3 14h2v7H3z"></path>
+    <path d="M14 10h7v2h-7z"></path>
+    <path d="M8 14h2v7H8z"></path>
   </svg>
 );
+
 const BoldIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.5 3A.5.5 0 007 3.5v2.096c-2.21.384-2.94 1.152-2.94 2.232C4.06 9.06 5.38 10 7.5 10h1.388c.056.054.11.11.162.162l1.5 1.5H7.5c-1.105 0-2 .895-2 2s.895 2 2 2h2.793l-1.147 1.146a.5.5 0 10.708.708L12.5 15h.5a.5.5 0 00.5-.5v-1.586l.07-.058C15.446 11.114 16 9.84 16 8.328 16 5.522 12.478 3 7.5 3zm0 1.5c2.61 0 4.5 1.524 4.5 3.828 0 1.138-.72 2.008-2.086 2.388L9.5 10.5H7.5c-.938 0-1.44-.612-1.44-1.268 0-.774.698-1.336 1.44-1.424V4.5z" clipRule="evenodd" /></svg>;
 const ItalicIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 3.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414V12a1 1 0 11-2 0V7.414L6.293 9.707a1 1 0 01-1.414-1.414l2-2a1.414 1.414 0 010-2zM6 15a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" clipRule="evenodd" transform="skewX(-15)" /></svg>;
 const UnderlineIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path d="M5 15h10v1H5v-1zm0-1.5A1.5 1.5 0 016.5 12H7V5H5v8.5zm10-8.5v7h.5a1.5 1.5 0 011.5 1.5V15h-2v-.5a.5.5 0 00-.5-.5h-7a.5.5 0 00-.5.5V15H3v-.5A1.5 1.5 0 014.5 13H5v-7a2 2 0 012-2h6a2 2 0 012 2z"/></svg>;
@@ -27,7 +35,7 @@ const UnderlineIcon: React.FC<{ className?: string }> = ({ className }) => <svg 
 
 const App: React.FC = () => {
   const [originalImage, setOriginalImage] = useState<HTMLImageElement | null>(null);
-  const [imageFileName, setImageFileName] = useState<string>('edited_image.png');
+  const [imageFileName, setImageFileName] = useState<string>('edited_image.png'); // Keep for export and backend communication
   const [cropSize, setCropSize] = useState<CropSize>(DEFAULT_CROP_SIZE);
   const [texts, setTexts] = useState<TextElement[]>(INITIAL_TEXT_ELEMENTS);
   const [gradientOverlay, setGradientOverlay] = useState<GradientSettings>(INITIAL_GRADIENT_SETTINGS);
@@ -36,24 +44,42 @@ const App: React.FC = () => {
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(texts.length > 0 ? texts[0].id : null);
   const [imageEffects, setImageEffects] = useState<ImageEffectsSettings>(INITIAL_IMAGE_EFFECTS_SETTINGS);
 
-  // New states for face detection
-  const [detectedFaces, setDetectedFaces] = useState<DetectedFace[]>([]);
-  const [isLoadingFaces, setIsLoadingFaces] = useState<boolean>(false);
-  const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
+  // States for manual region selection
+  const [manualRegions, setManualRegions] = useState<ManualRegion[]>([]);
+  const [isDrawing, setIsDrawing] = useState<boolean>(false);
+  const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null); // Canvas coords
+  const [currentDrawingRegion, setCurrentDrawingRegion] = useState<{x: number, y: number, width: number, height: number} | null>(null); // Canvas coords
 
-  // States for face selection UI
-  const [selectedFaceEffects, setSelectedFaceEffects] = useState<Record<string, FaceEffectSelection>>({}); // Keyed by DetectedFace.id
-  const [applyEffectToAllFaces, setApplyEffectToAllFaces] = useState<FaceEffectSelection>({ effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } });
-  const [isApplyingEffects, setIsApplyingEffects] = useState<boolean>(false);
+  // State for original image dimensions (still useful)
+  const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
+  const [isApplyingEffects, setIsApplyingEffects] = useState<boolean>(false); // Keep for applying manual effects
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const interactionCanvasRef = useRef<HTMLCanvasElement>(null); // For drawing interactions
   const logoImageRef = useRef<HTMLImageElement | null>(null);
+
+  // Helper to get mouse position relative to canvas
+  const getMousePos = (canvas: HTMLCanvasElement, evt: React.MouseEvent): { x: number, y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: evt.clientX - rect.left,
+      y: evt.clientY - rect.top
+    };
+  };
 
   const redrawCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (!ctx || !canvas) return;
+
+    // Ensure interaction canvas has same dimensions
+    const iCanvas = interactionCanvasRef.current;
+    if (iCanvas) {
+        iCanvas.width = canvas.width;
+        iCanvas.height = canvas.height;
+    }
+
 
     canvas.width = cropSize.width;
     canvas.height = cropSize.height;
@@ -175,7 +201,7 @@ const App: React.FC = () => {
 
       const actualLineHeightPx = fontSizePx * lineHeight;
       const totalTextHeight = lines.length > 0 ? (lines.length - 1) * actualLineHeightPx + fontSizePx : 0;
-      
+
       // Adjust Y position: yPosPx is the baseline of the first line of text.
       // We set textBaseline = 'middle', so fillText uses y as the vertical center.
       // The block of text should be centered around initialYPosPx.
@@ -387,8 +413,64 @@ const App: React.FC = () => {
         ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
     }
 
+    // Draw Manual Regions on the main canvas
+    if (originalImage && originalImageDimensions && manualRegions.length > 0) {
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
+      const scaleX = imgDrawWidth / originalImageDimensions.width;
+      const scaleY = imgDrawHeight / originalImageDimensions.height;
 
-  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, detectedFaces, isLoadingFaces, originalImageDimensions, isApplyingEffects]);
+      manualRegions.forEach((region, index) => {
+        const canvasX = imgOffsetX + region.x * scaleX;
+        const canvasY = imgOffsetY + region.y * scaleY;
+        const canvasWidth = region.width * scaleX;
+        const canvasHeight = region.height * scaleY;
+
+        ctx.strokeStyle = region.effect === 'none' ? 'rgba(255, 255, 0, 0.7)' : 'rgba(50, 200, 255, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+
+        const textContent = `${index + 1}`;
+        ctx.fillStyle = region.effect === 'none' ? 'rgba(255, 255, 0, 0.7)' : 'rgba(50, 200, 255, 0.8)';
+        const fontSize = Math.max(12, Math.min(canvasWidth / 4, canvasHeight / 4));
+        ctx.font = `bold ${fontSize}px Arial`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        const textMetrics = ctx.measureText(textContent);
+        const textBgPadding = fontSize * 0.2;
+        ctx.fillRect(canvasX, canvasY, textMetrics.width + textBgPadding * 2, fontSize + textBgPadding * 2);
+
+        ctx.fillStyle = 'black';
+        ctx.fillText(textContent, canvasX + textBgPadding, canvasY + textBgPadding);
+      });
+    }
+
+
+  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, manualRegions, originalImageDimensions, isApplyingEffects]);
+
+  // Separate redraw for interaction canvas (for current drawing region)
+  useEffect(() => {
+    const iCanvas = interactionCanvasRef.current;
+    if (!iCanvas || activeTool !== 'regionSelector') {
+        // Clear interaction canvas if tool not active or canvas not present
+        if(iCanvas) {
+            const iCtx = iCanvas.getContext('2d');
+            iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
+        }
+        return;
+    };
+    const iCtx = iCanvas.getContext('2d');
+    if (!iCtx) return;
+
+    iCtx.clearRect(0, 0, iCanvas.width, iCanvas.height);
+
+    if (isDrawing && currentDrawingRegion) {
+      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
+      iCtx.lineWidth = 2;
+      iCtx.strokeRect(currentDrawingRegion.x, currentDrawingRegion.y, currentDrawingRegion.width, currentDrawingRegion.height);
+    }
+  }, [isDrawing, currentDrawingRegion, activeTool]);
+
 
   // Helper function to calculate image drawing parameters (to avoid repetition)
   const calculateImageDrawParams = (
@@ -419,11 +501,86 @@ const App: React.FC = () => {
     redrawCanvas();
   }, [redrawCanvas]);
 
+  const handleInteractionMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeTool !== 'regionSelector' || !interactionCanvasRef.current || !originalImage) return;
+    const pos = getMousePos(interactionCanvasRef.current, event);
+    setStartPoint(pos);
+    setIsDrawing(true);
+    setCurrentDrawingRegion({ x: pos.x, y: pos.y, width: 0, height: 0 });
+  };
+
+  const handleInteractionMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || !startPoint || !interactionCanvasRef.current) return;
+    const pos = getMousePos(interactionCanvasRef.current, event);
+    setCurrentDrawingRegion({
+      x: Math.min(pos.x, startPoint.x),
+      y: Math.min(pos.y, startPoint.y),
+      width: Math.abs(pos.x - startPoint.x),
+      height: Math.abs(pos.y - startPoint.y),
+    });
+  };
+
+  const handleInteractionMouseUp = () => {
+    if (!isDrawing || !currentDrawingRegion || !interactionCanvasRef.current || !originalImage || !originalImageDimensions) {
+      setIsDrawing(false);
+      return;
+    }
+    setIsDrawing(false);
+
+    // Convert canvas coordinates to original image coordinates
+    const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, interactionCanvasRef.current, originalImageDimensions);
+    const scaleX = originalImageDimensions.width / imgDrawWidth;
+    const scaleY = originalImageDimensions.height / imgDrawHeight;
+
+    const originalX = (currentDrawingRegion.x - imgOffsetX) * scaleX;
+    const originalY = (currentDrawingRegion.y - imgOffsetY) * scaleY;
+    const originalWidth = currentDrawingRegion.width * scaleX;
+    const originalHeight = currentDrawingRegion.height * scaleY;
+
+    if (originalWidth > 0 && originalHeight > 0) {
+      const newRegion: ManualRegion = {
+        id: `manual-${Date.now()}`,
+        x: Math.max(0, originalX), // Ensure not negative due to drawing outside image bounds on canvas
+        y: Math.max(0, originalY),
+        width: originalWidth,
+        height: originalHeight,
+        effect: 'none',
+        params: { shape: 'squared' }
+      };
+      // Further clamp to ensure region is within original image boundaries fully
+      newRegion.width = Math.min(newRegion.width, originalImageDimensions.width - newRegion.x);
+      newRegion.height = Math.min(newRegion.height, originalImageDimensions.height - newRegion.y);
+
+      if (newRegion.width > 0 && newRegion.height > 0) {
+         setManualRegions(prev => [...prev, newRegion]);
+      }
+    }
+    setCurrentDrawingRegion(null);
+    setStartPoint(null);
+  };
+
+  const handleInteractionMouseLeave = () => {
+    if (isDrawing) {
+      setIsDrawing(false);
+      setCurrentDrawingRegion(null);
+      setStartPoint(null);
+    }
+  };
+
+
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setImageFileName(file.name.substring(0, file.name.lastIndexOf('.')) + '_edited.png');
-      setDetectedFaces([]); // Clear previous faces
+      // Reset states for new image
+      setOriginalImage(null);
+      setOriginalImageDimensions(null);
+      setManualRegions([]);
+      setCurrentDrawingRegion(null);
+      setIsDrawing(false);
+      setStartPoint(null);
+      // setDetectedFaces([]); // This state is removed
+      // setIsLoadingFaces(false); // This state is removed
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -826,194 +983,147 @@ const App: React.FC = () => {
           </div>
         );
       // REMOVED ERRONEOUS DEFAULT HERE
-      case 'faceProcessor':
+      // case 'faceProcessor': // This case is now removed / replaced by regionSelector
+        // ... old faceProcessor UI ...
+      case 'regionSelector':
         if (!originalImage) {
-          return <div className="p-4 text-gray-400">Upload an image to use face tools.</div>;
-        }
-        if (isLoadingFaces) {
-          return <div className="p-4 text-gray-400">Detecting faces... Please wait.</div>;
-        }
-        if (detectedFaces.length === 0) {
-          return <div className="p-4 text-gray-400">No faces detected in the image.</div>;
+          return <div className="p-4 text-gray-400">Upload an image to define regions.</div>;
         }
 
-        const handleAllFacesEffectChange = (effect: 'none' | 'blur' | 'pixelate') => {
-          setApplyEffectToAllFaces(prev => ({ ...prev, effect }));
-        };
-        const handleAllFacesParamChange = (param: string, value: number | string) => {
-          setApplyEffectToAllFaces(prev => ({ ...prev, params: { ...prev.params, [param]: value } }));
+        const handleRegionEffectChange = (regionId: string, newEffect: 'none' | 'blur' | 'pixelate') => {
+          setManualRegions(prevRegions => prevRegions.map(r =>
+            r.id === regionId ? { ...r, effect: newEffect, params: r.params || {shape: 'squared'} } : r
+          ));
         };
 
-        const handleFaceEffectChange = (faceId: string, effect: 'none' | 'blur' | 'pixelate') => {
-          setSelectedFaceEffects(prev => ({
-            ...prev,
-            [faceId]: {
-              ...(prev[faceId] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } }),
-              effect: effect,
-            }
-          }));
+        const handleRegionParamChange = (regionId: string, paramName: string, value: string | number) => {
+          setManualRegions(prevRegions => prevRegions.map(r =>
+            r.id === regionId ? { ...r, params: { ...(r.params || {shape: 'squared'}), [paramName]: value } } : r
+          ));
         };
-        const handleFaceParamChange = (faceId: string, param: string, value: number | string) => {
-          setSelectedFaceEffects(prev => ({
-            ...prev,
-            [faceId]: {
-              ...(prev[faceId] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } }),
-              params: {
-                ...(prev[faceId]?.params || { intensity: 10, block_size: 10, shape: 'squared' }),
-                [param]: value,
-              }
-            }
-          }));
+
+        const deleteRegion = (regionId: string) => {
+          setManualRegions(prevRegions => prevRegions.filter(r => r.id !== regionId));
         };
 
         return (
           <div className="space-y-4 p-4">
-            <h3 className="text-lg font-semibold text-blue-300">Face Effects</h3>
+            <h3 className="text-lg font-semibold text-blue-300">Define & Anonymize Areas</h3>
+            <p className="text-sm text-gray-400">Click and drag on the image to define areas. Then, select an effect for each area below.</p>
 
-            {/* Apply to All Faces Section */}
-            <fieldset className="space-y-2 border border-gray-600 p-3 rounded-md">
-              <legend className="text-sm font-medium text-blue-400 px-1">Apply to All Detected Faces</legend>
-              <select
-                value={applyEffectToAllFaces.effect}
-                onChange={(e) => handleAllFacesEffectChange(e.target.value as 'none'|'blur'|'pixelate')}
-                className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
-              >
-                <option value="none">None</option>
-                <option value="blur">Blur All</option>
-                <option value="pixelate">Pixelate All</option>
-              </select>
+            {manualRegions.length === 0 && (
+              <p className="text-gray-400 text-center py-4">No areas defined yet. Draw on the image to start.</p>
+            )}
 
-              {applyEffectToAllFaces.effect === 'blur' && (
-                <div className="mt-2 space-y-1">
-                  <label htmlFor="all-blur-intensity" className="block text-sm font-medium text-gray-300">Blur Intensity</label>
-                  <input type="range" id="all-blur-intensity" min="1" max="50" step="1" value={applyEffectToAllFaces.params.intensity || 10} onChange={(e) => handleAllFacesParamChange('intensity', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                  <label htmlFor="all-blur-shape" className="block text-sm font-medium text-gray-300">Shape</label>
-                  <select value={applyEffectToAllFaces.params.shape || 'squared'} onChange={e => handleAllFacesParamChange('shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
-                    <option value="squared">Squared</option>
-                    <option value="rounded">Rounded</option>
-                  </select>
-                </div>
-              )}
-              {applyEffectToAllFaces.effect === 'pixelate' && (
-                <div className="mt-2 space-y-1">
-                  <label htmlFor="all-pixelate-blocksize" className="block text-sm font-medium text-gray-300">Pixelation Block Size</label>
-                  <input type="range" id="all-pixelate-blocksize" min="2" max="50" step="1" value={applyEffectToAllFaces.params.block_size || 10} onChange={(e) => handleAllFacesParamChange('block_size', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                  <label htmlFor="all-pixelate-shape" className="block text-sm font-medium text-gray-300">Shape</label>
-                  <select value={applyEffectToAllFaces.params.shape || 'squared'} onChange={e => handleAllFacesParamChange('shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
-                    <option value="squared">Squared</option>
-                    <option value="rounded">Rounded</option>
-                  </select>
-                </div>
-              )}
-            </fieldset>
-
-            {/* Individual Faces Section */}
-            <h4 className="text-md font-semibold text-blue-300 pt-2">Individual Faces</h4>
-            {detectedFaces.map((face, index) => {
-              const currentFaceEffect = selectedFaceEffects[face.id] || { effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } };
-              return (
-                <fieldset key={face.id} className="space-y-1 border border-gray-600 p-3 rounded-md">
-                  <legend className="text-sm font-medium text-blue-400 px-1">Face {index + 1}</legend>
-                  <select
-                    value={currentFaceEffect.effect}
-                    onChange={(e) => handleFaceEffectChange(face.id, e.target.value as 'none'|'blur'|'pixelate')}
-                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
-                    disabled={applyEffectToAllFaces.effect !== 'none'} // Disable if "all faces" is active
+            {manualRegions.map((region, index) => (
+              <fieldset key={region.id} className="space-y-2 border border-gray-600 p-3 rounded-md">
+                <div className="flex justify-between items-center">
+                  <legend className="text-sm font-medium text-blue-400 px-1">Area {index + 1}</legend>
+                  <button
+                    onClick={() => deleteRegion(region.id)}
+                    className="text-red-400 hover:text-red-300 text-xs"
+                    aria-label={`Delete Area ${index + 1}`}
                   >
-                    <option value="none">None</option>
-                    <option value="blur">Blur</option>
-                    <option value="pixelate">Pixelate</option>
-                  </select>
+                    Delete
+                  </button>
+                </div>
 
-                  {currentFaceEffect.effect === 'blur' && (
-                    <div className="mt-2 space-y-1">
-                      <label htmlFor={`face-${face.id}-blur-intensity`} className="block text-sm font-medium text-gray-300">Intensity</label>
-                      <input type="range" id={`face-${face.id}-blur-intensity`} min="1" max="50" step="1" value={currentFaceEffect.params.intensity || 10} onChange={(e) => handleFaceParamChange(face.id, 'intensity', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={applyEffectToAllFaces.effect !== 'none'} />
-                      <label htmlFor={`face-${face.id}-blur-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
-                      <select value={currentFaceEffect.params.shape || 'squared'} onChange={e => handleFaceParamChange(face.id, 'shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs" disabled={applyEffectToAllFaces.effect !== 'none'}>
-                        <option value="squared">Squared</option>
-                        <option value="rounded">Rounded</option>
-                      </select>
-                    </div>
-                  )}
-                  {currentFaceEffect.effect === 'pixelate' && (
-                    <div className="mt-2 space-y-1">
-                      <label htmlFor={`face-${face.id}-pixelate-blocksize`} className="block text-sm font-medium text-gray-300">Block Size</label>
-                      <input type="range" id={`face-${face.id}-pixelate-blocksize`} min="2" max="50" step="1" value={currentFaceEffect.params.block_size || 10} onChange={(e) => handleFaceParamChange(face.id, 'block_size', parseInt(e.target.value))} className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" disabled={applyEffectToAllFaces.effect !== 'none'} />
-                      <label htmlFor={`face-${face.id}-pixelate-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
-                      <select value={currentFaceEffect.params.shape || 'squared'} onChange={e => handleFaceParamChange(face.id, 'shape', e.target.value)} className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs" disabled={applyEffectToAllFaces.effect !== 'none'}>
-                        <option value="squared">Squared</option>
-                        <option value="rounded">Rounded</option>
-                      </select>
-                    </div>
-                  )}
-                </fieldset>
-              )
-            })}
+                <select
+                  value={region.effect}
+                  onChange={(e) => handleRegionEffectChange(region.id, e.target.value as 'none'|'blur'|'pixelate')}
+                  className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
+                >
+                  <option value="none">None</option>
+                  <option value="blur">Blur</option>
+                  <option value="pixelate">Pixelate</option>
+                  {/* Add 'sticker' option here if implementing stickers for manual regions */}
+                </select>
+
+                {region.effect === 'blur' && (
+                  <div className="mt-2 space-y-1">
+                    <label htmlFor={`region-${region.id}-blur-intensity`} className="block text-sm font-medium text-gray-300">Intensity</label>
+                    <input
+                      type="range" id={`region-${region.id}-blur-intensity`}
+                      min="1" max="50" step="1"
+                      value={region.params.intensity || 10}
+                      onChange={(e) => handleRegionParamChange(region.id, 'intensity', parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                    <label htmlFor={`region-${region.id}-blur-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
+                    <select
+                      value={region.params.shape || 'squared'}
+                      onChange={e => handleRegionParamChange(region.id, 'shape', e.target.value)}
+                      className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
+                      <option value="squared">Squared</option>
+                      <option value="rounded">Rounded</option>
+                    </select>
+                  </div>
+                )}
+                {region.effect === 'pixelate' && (
+                  <div className="mt-2 space-y-1">
+                    <label htmlFor={`region-${region.id}-pixelate-blocksize`} className="block text-sm font-medium text-gray-300">Block Size</label>
+                    <input
+                      type="range" id={`region-${region.id}-pixelate-blocksize`}
+                      min="2" max="50" step="1"
+                      value={region.params.block_size || 10}
+                      onChange={(e) => handleRegionParamChange(region.id, 'block_size', parseInt(e.target.value))}
+                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                    <label htmlFor={`region-${region.id}-pixelate-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
+                    <select
+                      value={region.params.shape || 'squared'}
+                      onChange={e => handleRegionParamChange(region.id, 'shape', e.target.value)}
+                      className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
+                      <option value="squared">Squared</option>
+                      <option value="rounded">Rounded</option>
+                    </select>
+                  </div>
+                )}
+              </fieldset>
+            ))}
 
             <button
-              onClick={handleApplyFaceEffects}
+              onClick={handleApplyManualEffects} // This function will be created/updated in next step
               className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md mt-4 disabled:opacity-50"
-              disabled={isLoadingFaces || isApplyingEffects || !originalImage || detectedFaces.length === 0 || (applyEffectToAllFaces.effect === 'none' && Object.values(selectedFaceEffects).every(sfe => sfe.effect === 'none'))}
+              disabled={isApplyingEffects || manualRegions.length === 0 || manualRegions.every(r => r.effect === 'none')}
             >
-              {isApplyingEffects ? 'Applying...' : 'Apply Face Effects'}
+              {isApplyingEffects ? 'Applying...' : 'Apply Effects to Areas'}
             </button>
           </div>
         );
-
       default:
         return <div className="p-4 text-gray-400">Select a tool to see its options.</div>;
     }
   };
 
-  const handleApplyFaceEffects = async () => {
-    if (!originalImage || !imageFileName || !originalImageDimensions) {
-      console.error("Cannot apply effects: Original image data missing.");
+  const handleApplyManualEffects = async () => {
+    if (!originalImage || !imageFileName || !originalImageDimensions || manualRegions.length === 0) {
+      console.error("Cannot apply manual effects: Missing data or no regions defined.");
+      return;
+    }
+
+    const regionsToProcess = manualRegions.filter(r => r.effect !== 'none');
+    if (regionsToProcess.length === 0) {
+      alert("No effects selected for any defined areas.");
       return;
     }
 
     setIsApplyingEffects(true);
 
-    const selectionsPayload: { index: number; effect: string; params: any }[] = [];
+    // Prepare payload for the backend: list of {x, y, width, height, effect, params}
+    const payloadRegions = regionsToProcess.map(region => ({
+      x: region.x,
+      y: region.y,
+      width: region.width,
+      height: region.height,
+      effect: region.effect,
+      params: region.params, // Includes shape, intensity/block_size
+    }));
 
-    if (applyEffectToAllFaces.effect !== 'none') {
-      detectedFaces.forEach((face, index) => {
-        selectionsPayload.push({
-          index: index, // Assuming backend maps index to detected_faces order
-          effect: applyEffectToAllFaces.effect,
-          params: { ...applyEffectToAllFaces.params }
-        });
-      });
-    } else {
-      detectedFaces.forEach((face, index) => {
-        const effectSelection = selectedFaceEffects[face.id];
-        if (effectSelection && effectSelection.effect !== 'none') {
-          selectionsPayload.push({
-            index: index,
-            effect: effectSelection.effect,
-            params: { ...effectSelection.params }
-          });
-        }
-      });
-    }
-
-    if (selectionsPayload.length === 0) {
-      console.log("No effects selected to apply.");
-      setIsApplyingEffects(false);
-      return;
-    }
-
-    // This is what would be sent to the backend.
-    // The backend's /api/apply_effects expects:
-    // { image_filename: string, selections: [], detected_boxes: [] }
-    // The `detected_boxes` are the original boxes from the detection step.
     const payload = {
-      image_filename: imageFileName, // Assuming imageFileName is a unique ID the backend can use
-      selections: selectionsPayload,
-      detected_boxes: detectedFaces.map(f => ({x: f.x, y: f.y, width: f.width, height: f.height, label: f.label})), // Send original boxes
+      image_filename: imageFileName,
+      regions: payloadRegions,
     };
 
-    console.log("Simulating API call to /api/apply_effects with payload:", JSON.stringify(payload, null, 2));
+    console.log("Simulating API call to /api/apply_effects with manual regions payload:", JSON.stringify(payload, null, 2));
 
     // --- Mock API call for applying effects ---
     await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
@@ -1033,14 +1143,12 @@ const App: React.FC = () => {
     const newProcessedImage = new Image();
     newProcessedImage.onload = () => {
       setOriginalImage(newProcessedImage); // This would be the new image from backend
-      setDetectedFaces([]); // Clear faces as they are now "baked" into the image
-      setSelectedFaceEffects({});
-      setApplyEffectToAllFaces({ effect: 'none', params: { intensity: 10, block_size: 10, shape: 'squared' } });
-      // The title of the image could also be updated e.g. append "_processed_faces"
-      // setImageFileName(prev => prev.replace('_edited', '_edited_faces_processed'));
+      setManualRegions([]); // Clear manually defined regions
+      // The title of the image could also be updated e.g. append "_processed_regions"
+      // setImageFileName(prev => prev.replace('_edited', '_edited_regions_processed'));
       setIsApplyingEffects(false);
       setActiveTool(null); // Close the tool panel
-      alert("Mock: Face effects applied! The image displayed is notionally the processed one.");
+      alert("Mock: Effects applied to manual regions! The image displayed is notionally the processed one.");
     };
     newProcessedImage.onerror = () => {
         console.error("Mock: Error loading the 'processed' image.");
@@ -1061,7 +1169,7 @@ const App: React.FC = () => {
     { name: 'gradient', icon: GradientIcon, label: 'Gradient' },
     { name: 'logo', icon: LogoIcon, label: 'Logo' },
     { name: 'effects', icon: EffectsIcon, label: 'Effects'},
-    { name: 'faceProcessor', icon: FaceIcon, label: 'Faces'},
+    { name: 'regionSelector', icon: RegionSelectIcon, label: 'Select Area'},
   ];
 
   return (
@@ -1096,15 +1204,35 @@ const App: React.FC = () => {
           ))}
         </aside>
 
-        <main className="flex-grow flex items-center justify-center p-4 bg-gray-800/50 overflow-auto">
+        <main className="flex-grow flex items-center justify-center p-4 bg-gray-800/50 overflow-auto relative">
+          {/* Main display canvas */}
           <canvas 
             ref={canvasRef} 
             className="max-w-full max-h-full shadow-2xl bg-gray-700"
-            style={{ imageRendering: 'auto' }} 
+            style={{ imageRendering: 'auto', display: 'block' }}
             aria-label="Image editing canvas"
-          >
-            Your browser does not support the canvas element.
-          </canvas>
+          />
+          {/* Interaction canvas, overlaid for drawing */}
+          <canvas
+            ref={interactionCanvasRef}
+            className="max-w-full max-h-full absolute top-0 left-0"
+            style={{
+                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
+                // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
+                // For simplicity, assuming parent 'main' is the direct positioning context.
+                // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
+                // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
+                // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
+                // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
+                // Let's assume `main` centers a stack, so they overlay.
+                zIndex: 10
+            }}
+            onMouseDown={handleInteractionMouseDown}
+            onMouseMove={handleInteractionMouseMove}
+            onMouseUp={handleInteractionMouseUp}
+            onMouseLeave={handleInteractionMouseLeave}
+            aria-label="Interaction layer for drawing regions"
+          />
         </main>
 
         <aside 
