@@ -711,8 +711,9 @@ const App: React.FC = () => {
       iCtx.stroke();
 
       // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
+      const brushRadius = (currentBrushSettings.size * displayScaleX) / 2;
       iCtx.beginPath();
-      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
+      iCtx.arc(currentDisplayX, currentDisplayY, brushRadius, 0, Math.PI * 2);
       iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
       iCtx.lineWidth = 1;
       iCtx.stroke();
@@ -1178,7 +1179,7 @@ const App: React.FC = () => {
               <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">Brush Size ({currentBrushSettings.size}px)</label>
               <input
                 type="range" id="brush-size"
-                min="5" max="100" step="1"
+                min="50" max="300" step="1"
                 value={currentBrushSettings.size}
                 onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
                 className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
