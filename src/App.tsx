@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // DetectedFace removed from imports as it's no longer used
 import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
@@ -370,7 +369,16 @@ const App: React.FC = () => {
 
     // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
 
-    // Loading indicator for applying effects (isApplyingEffects) has been removed as it's no longer used.
+    // Loading indicator for applying effects
+    if (isApplyingEffects) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.font = `${canvas.width * 0.05}px ${DEFAULT_FONT_FAMILY}`;
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
+    }
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
@@ -1190,14 +1198,13 @@ const App: React.FC = () => {
             ref={interactionCanvasRef}
             className="max-w-full max-h-full absolute top-0 left-0"
             style={{
-                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
+                pointerEvents: (activeTool === 'blurBrush' || activeTool === 'pixelateBrush') ? 'auto' : 'none',
                 // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
                 // For simplicity, assuming parent 'main' is the direct positioning context.
                 // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
                 // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
                 // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
                 // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
-                // Let's assume `main` centers a stack, so they overlay.
                 zIndex: 10
             }}
             onMouseDown={handleInteractionMouseDown}
