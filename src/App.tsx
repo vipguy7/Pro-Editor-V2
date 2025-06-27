@@ -382,7 +382,7 @@ const App: React.FC = () => {
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
-      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
       const displayScaleX = imgDrawWidth / originalImageDimensions.width;
       const displayScaleY = imgDrawHeight / originalImageDimensions.height;
 
@@ -402,7 +402,7 @@ const App: React.FC = () => {
           tempCtx.clearRect(0, 0, tempEffectCanvas.width, tempEffectCanvas.height);
           tempCtx.drawImage(originalImage,
             0, 0, originalImageDimensions.width, originalImageDimensions.height,
-            imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight
+            imgOffsetY, imgOffsetY, imgDrawWidth, imgDrawHeight
           );
 
           // 2. Apply the effect to the temporary canvas (e.g., blur the whole temp canvas)
@@ -419,11 +419,11 @@ const App: React.FC = () => {
 
           // 3. Create the stroke path (scaled to display coordinates)
           const path = new Path2D();
-          const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetX;
+          const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetY;
           const firstScaledPointY = stroke.points[0].y * displayScaleY + imgOffsetY;
           path.moveTo(firstScaledPointX, firstScaledPointY);
           for (let i = 1; i < stroke.points.length; i++) {
-            const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
+            const scaledX = stroke.points[i].x * displayScaleX + imgOffsetY;
             const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
             path.lineTo(scaledX, scaledY);
           }
@@ -442,7 +442,7 @@ const App: React.FC = () => {
             blurCanvas.height = canvas.height;
             const blurCtx = blurCanvas.getContext('2d');
             if(blurCtx){
-                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight);
+                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetY, imgOffsetY, imgDrawWidth, imgDrawHeight);
                 blurCtx.filter = `blur(${stroke.effectStrength}px)`;
                 blurCtx.drawImage(blurCanvas, 0, 0); // Apply filter by drawing itself
                 blurCtx.filter = 'none';
@@ -455,7 +455,7 @@ const App: React.FC = () => {
             // Get bounding box of the stroke to minimize processing area.
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             stroke.points.forEach(p => {
-                const sx = p.x * displayScaleX + imgOffsetX;
+                const sx = p.x * displayScaleX + imgOffsetY;
                 const sy = p.y * displayScaleY + imgOffsetY;
                 minX = Math.min(minX, sx); minY = Math.min(minY, sy);
                 maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy);
@@ -474,7 +474,7 @@ const App: React.FC = () => {
                 if (pTempCtx) {
                     // Draw the relevant part of original image onto this smaller temp canvas
                     pTempCtx.drawImage(originalImage,
-                        (minX - imgOffsetX) / displayScaleX, (minY - imgOffsetY) / displayScaleY, // srcX, srcY (original img coords)
+                        (minX - imgOffsetY) / displayScaleX, (minY - imgOffsetY) / displayScaleY, // srcX, srcY (original img coords)
                         regionWidth / displayScaleX, regionHeight / displayScaleY,            // srcWidth, srcHeight (original img coords)
                         0, 0, regionWidth, regionHeight                                      // destX, destY, destWidth, destHeight (on pixelTempCanvas)
                     );
@@ -515,7 +515,6 @@ const App: React.FC = () => {
     // Draw brush cursor preview if a brush tool is active
     if ((activeTool === 'blurBrush' || activeTool === 'pixelateBrush') && lastPoint && originalImageDimensions && originalImage && canvasRef.current) {
         const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
-        const displayScaleX = imgDrawWidth / originalImageDimensions.width;
         const displayScaleY = imgDrawHeight / originalImageDimensions.height;
 
         // lastPoint is in original image coords, convert to display canvas coords for cursor
