@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // DetectedFace removed from imports as it's no longer used
 import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
@@ -621,7 +622,7 @@ const App: React.FC = () => {
 
       // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
       iCtx.beginPath();
-      iCtx.arc(pos.x, pos.y, (currentBrushSettings.size * displayScaleX) / 2, 0, Math.PI * 2);
+      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
       iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
       iCtx.lineWidth = 1;
       iCtx.stroke();
@@ -758,7 +759,7 @@ const App: React.FC = () => {
   const currentSelectedText = texts.find(t => t.id === selectedTextElementId);
 
   const rgbToHex = (rgba: string): string => {
-    const parts = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d)(?:,\s*[\d.]+)?\)/);
+    const parts = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
     if (!parts) return '#000000';
     return "#" + [parts[1], parts[2], parts[3]].map(x => {
       const hex = parseInt(x).toString(16);
@@ -1084,14 +1085,12 @@ const App: React.FC = () => {
             </h3>
 
             <div>
-              <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">
-                Brush Size ({currentBrushSettings.size}px)
-              </label>
+              <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">Brush Size ({currentBrushSettings.size}px)</label>
               <input
                 type="range" id="brush-size"
-                min="20" max="200" step="1"
+                min="5" max="100" step="1"
                 value={currentBrushSettings.size}
-                onChange={e => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
+                onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
                 className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
             </div>
 
@@ -1191,29 +1190,28 @@ const App: React.FC = () => {
             ref={interactionCanvasRef}
             className="max-w-full max-h-full absolute top-0 left-0"
             style={{
-                pointerEvents: (activeTool === 'blurBrush' || activeTool === 'pixelateBrush') ? 'auto' : 'none',
+                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
                 // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
                 // For simplicity, assuming parent 'main' is the direct positioning context.
                 // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
                 // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
                 // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
                 // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
+                // Let's assume `main` centers a stack, so they overlay.
                 zIndex: 10
             }}
             onMouseDown={handleInteractionMouseDown}
-            onMouseMove={handleInteractionMouseMove}e}
-            onMouseUp={handleInteractionMouseUp}awing regions"
             onMouseMove={handleInteractionMouseMove}
             onMouseUp={handleInteractionMouseUp}
             onMouseLeave={handleInteractionMouseLeave}
             aria-label="Interaction layer for drawing regions"
-          />            className={`w-80 bg-gray-800 border-l border-gray-700 transition-transform duration-300 ease-in-out overflow-y-auto ${activeTool ? 'translate-x-0' : 'translate-x-full'}`}
-        </main>le={{maxHeight: 'calc(100vh - 60px)'}} // Adjusted height
+          />
+        </main>
 
         <aside 
-            className={`w-80 bg-gray-800 border-l border-gray-700 transition-transform duration-300 ease-in-out overflow-y-auto ${activeTool ? 'translate-x-0' : 'translate-x-full'}`}ions() : (
-            style={{maxHeight: 'calc(100vh - 60px)'}} // Adjusted height    <div className="p-4 text-gray-400 h-full flex items-center justify-center">
-            aria-hidden={!activeTool}to start editing.</p>
+            className={`w-80 bg-gray-800 border-l border-gray-700 transition-transform duration-300 ease-in-out overflow-y-auto ${activeTool ? 'translate-x-0' : 'translate-x-full'}`}
+            style={{maxHeight: 'calc(100vh - 60px)'}} // Adjusted height
+            aria-hidden={!activeTool}
         >
           {activeTool ? renderToolOptions() : (
              <div className="p-4 text-gray-400 h-full flex items-center justify-center">
@@ -1222,6 +1220,8 @@ const App: React.FC = () => {
           )}
         </aside>
       </div>
-    </div>port default App;
-  );};
+    </div>
+  );
+};
+
 export default App;
