@@ -251,11 +251,11 @@ const App: React.FC = () => {
         if (outlineEnabled && outlineWidth > 0) {
           ctx.strokeStyle = outlineColor;
           ctx.lineWidth = outlineWidth;
-          ctx.strokeText(line, xPosPx, currentLineY);
+          ctx.strokeText(line, finalXPosPx, currentLineY);
         }
         
         ctx.fillStyle = color;
-        ctx.fillText(line, xPosPx, currentLineY);
+        ctx.fillText(line, finalXPosPx, currentLineY);
 
         // Reset shadow for other elements (like underline)
         ctx.shadowOffsetX = 0;
@@ -266,12 +266,12 @@ const App: React.FC = () => {
         if (textDecoration === 'underline') {
           const textMetrics = ctx.measureText(line);
           const lineWidth = textMetrics.width;
-          let lineXStart = xPosPx;
+          let lineXStart = finalXPosPx; // Use finalXPosPx
 
           if (textAlign === 'center') {
-            lineXStart = xPosPx - lineWidth / 2;
+            lineXStart = finalXPosPx - lineWidth / 2; // Use finalXPosPx
           } else if (textAlign === 'right') {
-            lineXStart = xPosPx - lineWidth;
+            lineXStart = finalXPosPx - lineWidth; // Use finalXPosPx
           }
           
           const lineY = currentLineY + fontSizePx / 2 + Math.max(1, fontSizePx * 0.05); // Position underline slightly below baseline
