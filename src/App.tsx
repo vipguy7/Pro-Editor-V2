@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // DetectedFace removed from imports as it's no longer used
 import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
@@ -370,7 +371,6 @@ const App: React.FC = () => {
     // Old drawing logic for detectedFaces and isLoadingFaces overlay has been removed.
 
     // Loading indicator for applying effects
-    /*
     if (isApplyingEffects) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Slightly darker overlay
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -380,7 +380,6 @@ const App: React.FC = () => {
         ctx.textBaseline = 'middle';
         ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
     }
-    */
 
     // Draw Brush Strokes on the main canvas
     if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
@@ -409,56 +408,10 @@ const App: React.FC = () => {
 
           // 2. Apply the effect to the temporary canvas (e.g., blur the whole temp canvas)
           if (stroke.type === 'blur') {
-            // Create a mask for the stroke path
-            const maskCanvas = document.createElement('canvas');
-            maskCanvas.width = canvas.width;
-            maskCanvas.height = canvas.height;
-            const maskCtx = maskCanvas.getContext('2d');
-            if (maskCtx) {
-              // Calculate firstScaledPointX/Y before use
-              const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetX;
-              const firstScaledPointY = stroke.points[0].y * displayScaleY + imgOffsetY;
-              maskCtx.save();
-              maskCtx.beginPath();
-              maskCtx.moveTo(firstScaledPointX, firstScaledPointY);
-              for (let i = 1; i < stroke.points.length; i++) {
-                const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
-                const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
-                maskCtx.lineTo(scaledX, scaledY);
-              }
-              maskCtx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
-              maskCtx.lineCap = 'round';
-              maskCtx.lineJoin = 'round';
-              maskCtx.strokeStyle = 'white';
-              maskCtx.stroke();
-              maskCtx.globalCompositeOperation = 'source-in';
-              maskCtx.fillStyle = 'white';
-              maskCtx.fill();
-              maskCtx.restore();
-
-              // Create a blurred version of the image
-              const blurCanvas = document.createElement('canvas');
-              blurCanvas.width = canvas.width;
-              blurCanvas.height = canvas.height;
-              const blurCtx = blurCanvas.getContext('2d');
-              if (blurCtx) {
-                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight);
-                blurCtx.filter = `blur(${stroke.effectStrength}px)`;
-                blurCtx.drawImage(blurCanvas, 0, 0);
-                blurCtx.filter = 'none';
-
-                // Apply the mask to the blurred image
-                blurCtx.globalCompositeOperation = 'destination-in';
-                blurCtx.drawImage(maskCanvas, 0, 0);
-                blurCtx.globalCompositeOperation = 'source-over';
-
-                // Draw the masked, blurred region onto the main canvas
-                ctx.save();
-                ctx.globalAlpha = 1.0;
-                ctx.drawImage(blurCanvas, 0, 0);
-                ctx.restore();
-              }
-            }
+            tempCtx.filter = `blur(${stroke.effectStrength}px)`;
+            // To apply filter, draw the canvas onto itself or another canvas
+            // Draw itself: but this blurs the entire image on temp.
+            // Instead, we should draw the stroke path, then use it as a clip.
           } else if (stroke.type === 'pixelate') {
             // Pixelation will be applied to the region of the stroke later if this approach is used
             // For now, this means the temp canvas has the original image content.
@@ -495,42 +448,8 @@ const App: React.FC = () => {
                 blurCtx.drawImage(blurCanvas, 0, 0); // Apply filter by drawing itself
                 blurCtx.filter = 'none';
 
-                // Create a mask for the stroke path
-                const maskCanvas = document.createElement('canvas');
-                maskCanvas.width = canvas.width;
-                maskCanvas.height = canvas.height;
-                const maskCtx = maskCanvas.getContext('2d');
-                if (maskCtx) {
-                  // Draw the stroke path as a filled region on the mask
-                  maskCtx.save();
-                  maskCtx.beginPath();
-                  maskCtx.moveTo(firstScaledPointX, firstScaledPointY);
-                  for (let i = 1; i < stroke.points.length; i++) {
-                    const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
-                    const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
-                    maskCtx.lineTo(scaledX, scaledY);
-                  }
-                  maskCtx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
-                  maskCtx.lineCap = 'round';
-                  maskCtx.lineJoin = 'round';
-                  maskCtx.strokeStyle = 'white';
-                  maskCtx.stroke();
-                  maskCtx.globalCompositeOperation = 'source-in';
-                  maskCtx.fillStyle = 'white';
-                  maskCtx.fill();
-                  maskCtx.restore();
-
-                  // Apply the mask to the blurred image
-                  blurCtx.globalCompositeOperation = 'destination-in';
-                  blurCtx.drawImage(maskCanvas, 0, 0);
-                  blurCtx.globalCompositeOperation = 'source-over';
-
-                  // Draw the masked, blurred region onto the main canvas
-                  ctx.save();
-                  ctx.globalAlpha = 1.0;
-                  ctx.drawImage(blurCanvas, 0, 0);
-                  ctx.restore();
-                }
+                ctx.clip(path); // Clip the main canvas
+                ctx.drawImage(blurCanvas, 0, 0); // Draw the fully blurred temp image, clipped by path
             }
           } else if (stroke.type === 'pixelate') {
             // For pixelate, we need to operate on a region.
@@ -683,22 +602,40 @@ const App: React.FC = () => {
     const pos = getMousePos(interactionCanvasRef.current, event);
     const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
 
-    // In handleInteractionMouseMove, replace inline preview/cursor logic with helper
     if (originalImgPos) {
       const iCtx = interactionCanvasRef.current.getContext('2d');
       if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
+
+      // Preview on interaction canvas (simple line for path, and cursor)
       iCtx.clearRect(0,0, iCtx.canvas.width, iCtx.canvas.height);
-      const { offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
-      drawBrushCursorAndPreview(
-        iCtx,
-        lastPoint,
-        originalImgPos,
-        currentBrushSettings.size,
-        canvasRef.current,
-        originalImageDimensions,
-        imgOffsetX,
-        imgOffsetY
-      );
+
+      // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+      const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
+      const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
+      const currentDisplayX = originalImgPos.x * displayScaleX + imgOffsetX;
+      const currentDisplayY = originalImgPos.y * displayScaleY + imgOffsetY;
+
+      // Draw line segment for current stroke part
+      iCtx.beginPath();
+      iCtx.moveTo(lastDisplayX, lastDisplayY);
+      iCtx.lineTo(currentDisplayX, currentDisplayY);
+      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red line for path preview
+      iCtx.lineWidth = currentBrushSettings.size * displayScaleX; // Scale brush size for display
+      iCtx.lineCap = 'round';
+      iCtx.lineJoin = 'round';
+      iCtx.stroke();
+
+      // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
+      iCtx.beginPath();
+      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
+      iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+      iCtx.lineWidth = 1;
+      iCtx.stroke();
+
       setCurrentStrokePoints(prev => [...prev, originalImgPos]);
       setLastPoint(originalImgPos);
     }
@@ -1069,7 +1006,7 @@ const App: React.FC = () => {
                 <input type="color" id="gradient-color1" value={rgbToHex(gradientOverlay.color1)} onChange={(e) => setGradientOverlay(prev => ({...prev, color1: hexToRgba(e.target.value, extractAlpha(prev.color1))}))} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md cursor-pointer" />
               </div>
               <div className="w-1/2">
-                <label htmlFor="gradient-color2" className="block text-sm font-medium text-gray-300">Color  2</label>
+                <label htmlFor="gradient-color2" className="block text-sm font-medium text-gray-300">Color 2</label>
                 <input type="color" id="gradient-color2" value={rgbToHex(gradientOverlay.color2)} onChange={(e) => setGradientOverlay(prev => ({...prev, color2: hexToRgba(e.target.value, extractAlpha(prev.color2))}))} className="w-full h-10 p-1 bg-gray-700 border border-gray-600 rounded-md cursor-pointer" />
               </div>
             </div>
@@ -1160,7 +1097,7 @@ const App: React.FC = () => {
               <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">Brush Size ({currentBrushSettings.size}px)</label>
               <input
                 type="range" id="brush-size"
-                min="50" max="300" step="1"
+                min="5" max="100" step="1"
                 value={currentBrushSettings.size}
                 onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
                 className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
@@ -1262,13 +1199,14 @@ const App: React.FC = () => {
             ref={interactionCanvasRef}
             className="max-w-full max-h-full absolute top-0 left-0"
             style={{
-                pointerEvents: (activeTool === 'blurBrush' || activeTool === 'pixelateBrush') ? 'auto' : 'none',
+                pointerEvents: activeTool === 'regionSelector' ? 'auto' : 'none',
                 // Ensure it aligns with canvasRef if centered by flex. Might need JS positioning if complex.
                 // For simplicity, assuming parent 'main' is the direct positioning context.
                 // We might need to adjust left/top based on canvasRef's actual offset if main has padding that affects canvasRef.
                 // This simple overlay works if canvasRef fills main or is top-left aligned within main's content box.
                 // The actual rendered position of canvasRef dictates how interactionCanvasRef should be placed.
                 // For a robust solution, interactionCanvas dimensions and position would dynamically match canvasRef after it renders.
+                // Let's assume `main` centers a stack, so they overlay.
                 zIndex: 10
             }}
             onMouseDown={handleInteractionMouseDown}
@@ -1296,46 +1234,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-// --- Brush Canvas Helpers ---
-const getDisplayScales = (canvas: HTMLCanvasElement, originalImageDimensions: {width: number, height: number}) => {
-  const { drawWidth, drawHeight } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
-  return {
-    displayScaleX: drawWidth / originalImageDimensions.width,
-    displayScaleY: drawHeight / originalImageDimensions.height
-  };
-};
-
-const drawBrushCursorAndPreview = (
-  iCtx: CanvasRenderingContext2D,
-  lastPoint: {x: number, y: number} | null,
-  currentPoint: {x: number, y: number} | null,
-  brushSize: number,
-  canvas: HTMLCanvasElement,
-  originalImageDimensions: {width: number, height: number},
-  imgOffsetX: number,
-  imgOffsetY: number
-) => {
-  const { displayScaleX, displayScaleY } = getDisplayScales(canvas, originalImageDimensions);
-  if (lastPoint && currentPoint) {
-    const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
-    const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
-    const currentDisplayX = currentPoint.x * displayScaleX + imgOffsetX;
-    const currentDisplayY = currentPoint.y * displayScaleY + imgOffsetY;
-    // Draw stroke preview
-    iCtx.beginPath();
-    iCtx.moveTo(lastDisplayX, lastDisplayY);
-    iCtx.lineTo(currentDisplayX, currentDisplayY);
-    iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
-    iCtx.lineWidth = brushSize * displayScaleX;
-    iCtx.lineCap = 'round';
-    iCtx.lineJoin = 'round';
-    iCtx.stroke();
-    // Draw brush cursor at current mouse
-    iCtx.beginPath();
-    iCtx.arc(currentDisplayX, currentDisplayY, (brushSize * displayScaleX) / 2, 0, Math.PI * 2);
-    iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-    iCtx.lineWidth = 1;
-    iCtx.stroke();
-  }
-};
