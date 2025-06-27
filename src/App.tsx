@@ -1,9 +1,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // DetectedFace removed from imports as it's no longer used
-import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings } from './types';
+import { CropSize, TextElement, GradientSettings, LogoSettings, ActiveTool, LogoPosition, GradientPresetId, ImageEffectsSettings, BrushStroke } from './types';
 import { CROP_SIZES, DEFAULT_CROP_SIZE, INITIAL_TEXT_ELEMENTS, GRADIENT_PRESETS, INITIAL_GRADIENT_SETTINGS, LOGO_POSITIONS, INITIAL_LOGO_SETTINGS, AVAILABLE_FONTS, BLUE_LINE_COLOR, BLUE_LINE_THICKNESS_FACTOR, DEFAULT_FONT_FAMILY, INITIAL_IMAGE_EFFECTS_SETTINGS, TEXT_EDGE_MARGIN_FACTOR } from './constants';
-import { ManualRegion } from './types'; // Added ManualRegion
+// ManualRegion import removed
+// import { ManualRegion } from './types';
 
 // import LoadingSpinner from './components/LoadingSpinner'; // Not used
 
@@ -18,16 +19,23 @@ const EffectsIcon: React.FC<{className?: string}> = ({className}) => (
   </svg>
 );
 // FaceIcon is no longer used.
-const RegionSelectIcon: React.FC<{className?: string}> = ({className}) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 3h7v7H3z"></path>
-    <path d="M14 14h7v7h-7z"></path>
-    <path d="M14 3h7v2h-7z"></path>
-    <path d="M3 14h2v7H3z"></path>
-    <path d="M14 10h7v2h-7z"></path>
-    <path d="M8 14h2v7H8z"></path>
-  </svg>
+// RegionSelectIcon is no longer used for rectangular selection and has been removed.
+// New Brush Icons
+const BlurBrushIcon: React.FC<{className?: string}> = ({className}) => ( // Simple placeholder
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="8" opacity="0.5"/>
+        <path d="M12 4a8 8 0 00-8 8 8 8 0 008 8 8 8 0 008-8 8 8 0 00-8-8zm0 14a6 6 0 01-6-6 6 6 0 016-6 6 6 0 016 6 6 6 0 01-6 6z" />
+        <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fontSize="8px" fill="white">B</text>
+    </svg>
 );
+const PixelateBrushIcon: React.FC<{className?: string}> = ({className}) => ( // Simple placeholder
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="6" width="4" height="4" /> <rect x="10" y="6" width="4" height="4" opacity="0.7"/> <rect x="14" y="6" width="4" height="4" />
+        <rect x="6" y="10" width="4" height="4" opacity="0.7"/> <rect x="10" y="10" width="4" height="4" /> <rect x="14" y="10" width="4" height="4" opacity="0.7"/>
+        <rect x="6" y="14" width="4" height="4" /> <rect x="10" y="14" width="4" height="4" opacity="0.7"/> <rect x="14" y="14" width="4" height="4" />
+    </svg>
+);
+
 
 const BoldIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.5 3A.5.5 0 007 3.5v2.096c-2.21.384-2.94 1.152-2.94 2.232C4.06 9.06 5.38 10 7.5 10h1.388c.056.054.11.11.162.162l1.5 1.5H7.5c-1.105 0-2 .895-2 2s.895 2 2 2h2.793l-1.147 1.146a.5.5 0 10.708.708L12.5 15h.5a.5.5 0 00.5-.5v-1.586l.07-.058C15.446 11.114 16 9.84 16 8.328 16 5.522 12.478 3 7.5 3zm0 1.5c2.61 0 4.5 1.524 4.5 3.828 0 1.138-.72 2.008-2.086 2.388L9.5 10.5H7.5c-.938 0-1.44-.612-1.44-1.268 0-.774.698-1.336 1.44-1.424V4.5z" clipRule="evenodd" /></svg>;
 const ItalicIcon: React.FC<{ className?: string }> = ({ className }) => <svg className={className} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M7.293 3.293a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414V12a1 1 0 11-2 0V7.414L6.293 9.707a1 1 0 01-1.414-1.414l2-2a1.414 1.414 0 010-2zM6 15a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" clipRule="evenodd" transform="skewX(-15)" /></svg>;
@@ -45,15 +53,17 @@ const App: React.FC = () => {
   const [selectedTextElementId, setSelectedTextElementId] = useState<string | null>(texts.length > 0 ? texts[0].id : null);
   const [imageEffects, setImageEffects] = useState<ImageEffectsSettings>(INITIAL_IMAGE_EFFECTS_SETTINGS);
 
-  // States for manual region selection
-  const [manualRegions, setManualRegions] = useState<ManualRegion[]>([]);
-  const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [startPoint, setStartPoint] = useState<{x: number, y: number} | null>(null); // Canvas coords
-  const [currentDrawingRegion, setCurrentDrawingRegion] = useState<{x: number, y: number, width: number, height: number} | null>(null); // Canvas coords
+  // States for brush tools
+  const [brushStrokes, setBrushStrokes] = useState<BrushStroke[]>([]);
+  const [currentBrushSettings, setCurrentBrushSettings] = useState<{ type: 'blur' | 'pixelate' | null, size: number, strength: number }>({ type: null, size: 20, strength: 10 });
+  const [isPainting, setIsPainting] = useState<boolean>(false);
+  const [lastPoint, setLastPoint] = useState<{x: number, y: number} | null>(null); // For stroke drawing, in original image coords
+  const [currentStrokePoints, setCurrentStrokePoints] = useState<{x: number, y: number}[]>([]); // Points for the current stroke, in original image coords
+
 
   // State for original image dimensions (still useful)
   const [originalImageDimensions, setOriginalImageDimensions] = useState<{width: number, height: number} | null>(null);
-  const [isApplyingEffects, setIsApplyingEffects] = useState<boolean>(false); // Keep for applying manual effects
+  // isApplyingEffects state removed as effects are now client-side and applied immediately or on redraw.
 
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -371,63 +381,158 @@ const App: React.FC = () => {
         ctx.fillText('Applying Effects...', canvas.width / 2, canvas.height / 2);
     }
 
-    // Draw Manual Regions on the main canvas
-    if (originalImage && originalImageDimensions && manualRegions.length > 0) {
-      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
-      const scaleX = imgDrawWidth / originalImageDimensions.width;
-      const scaleY = imgDrawHeight / originalImageDimensions.height;
+    // Draw Brush Strokes on the main canvas
+    if (originalImage && originalImageDimensions && brushStrokes.length > 0 && canvasRef.current) {
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
 
-      manualRegions.forEach((region, index) => {
-        const canvasX = imgOffsetX + region.x * scaleX;
-        const canvasY = imgOffsetY + region.y * scaleY;
-        const canvasWidth = region.width * scaleX;
-        const canvasHeight = region.height * scaleY;
+      // Create a single temporary canvas for processing strokes one by one
+      const tempEffectCanvas = document.createElement('canvas');
+      tempEffectCanvas.width = canvas.width;
+      tempEffectCanvas.height = canvas.height;
+      const tempCtx = tempEffectCanvas.getContext('2d');
 
-        ctx.strokeStyle = region.effect === 'none' ? 'rgba(255, 255, 0, 0.7)' : 'rgba(50, 200, 255, 0.8)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(canvasX, canvasY, canvasWidth, canvasHeight);
+      if (tempCtx) {
+        brushStrokes.forEach(stroke => {
+          if (stroke.points.length < 1) return;
 
-        const textContent = `${index + 1}`;
-        ctx.fillStyle = region.effect === 'none' ? 'rgba(255, 255, 0, 0.7)' : 'rgba(50, 200, 255, 0.8)';
-        const fontSize = Math.max(12, Math.min(canvasWidth / 4, canvasHeight / 4));
-        ctx.font = `bold ${fontSize}px Arial`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
+          // 1. Clear temp canvas and draw the current state of the main canvas (image + previous strokes)
+          //    OR, for better effect isolation, draw the original image portion.
+          //    Let's try drawing the original image portion for cleaner effect application.
+          tempCtx.clearRect(0, 0, tempEffectCanvas.width, tempEffectCanvas.height);
+          tempCtx.drawImage(originalImage,
+            0, 0, originalImageDimensions.width, originalImageDimensions.height,
+            imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight
+          );
 
-        const textMetrics = ctx.measureText(textContent);
-        const textBgPadding = fontSize * 0.2;
-        ctx.fillRect(canvasX, canvasY, textMetrics.width + textBgPadding * 2, fontSize + textBgPadding * 2);
+          // 2. Apply the effect to the temporary canvas (e.g., blur the whole temp canvas)
+          if (stroke.type === 'blur') {
+            tempCtx.filter = `blur(${stroke.effectStrength}px)`;
+            // To apply filter, draw the canvas onto itself or another canvas
+            // Draw itself: but this blurs the entire image on temp.
+            // Instead, we should draw the stroke path, then use it as a clip.
+          } else if (stroke.type === 'pixelate') {
+            // Pixelation will be applied to the region of the stroke later if this approach is used
+            // For now, this means the temp canvas has the original image content.
+            // A more direct approach for pixelation would be to get image data, pixelate, then draw.
+          }
 
-        ctx.fillStyle = 'black';
-        ctx.fillText(textContent, canvasX + textBgPadding, canvasY + textBgPadding);
-      });
+          // 3. Create the stroke path (scaled to display coordinates)
+          const path = new Path2D();
+          const firstScaledPointX = stroke.points[0].x * displayScaleX + imgOffsetX;
+          const firstScaledPointY = stroke.points[0].y * displayScaleY + imgOffsetY;
+          path.moveTo(firstScaledPointX, firstScaledPointY);
+          for (let i = 1; i < stroke.points.length; i++) {
+            const scaledX = stroke.points[i].x * displayScaleX + imgOffsetX;
+            const scaledY = stroke.points[i].y * displayScaleY + imgOffsetY;
+            path.lineTo(scaledX, scaledY);
+          }
+
+          // 4. Draw the stroke with the effect onto the main canvas `ctx`
+          ctx.save();
+          ctx.lineWidth = stroke.brushSize * Math.min(displayScaleX, displayScaleY); // Scaled brush size
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          if (stroke.type === 'blur') {
+            // Apply blur to the temp canvas where the original image part is.
+            // Then clip with the path and draw to main.
+            const blurCanvas = document.createElement('canvas');
+            blurCanvas.width = canvas.width;
+            blurCanvas.height = canvas.height;
+            const blurCtx = blurCanvas.getContext('2d');
+            if(blurCtx){
+                blurCtx.drawImage(originalImage, 0, 0, originalImageDimensions.width, originalImageDimensions.height, imgOffsetX, imgOffsetY, imgDrawWidth, imgDrawHeight);
+                blurCtx.filter = `blur(${stroke.effectStrength}px)`;
+                blurCtx.drawImage(blurCanvas, 0, 0); // Apply filter by drawing itself
+                blurCtx.filter = 'none';
+
+                ctx.clip(path); // Clip the main canvas
+                ctx.drawImage(blurCanvas, 0, 0); // Draw the fully blurred temp image, clipped by path
+            }
+          } else if (stroke.type === 'pixelate') {
+            // For pixelate, we need to operate on a region.
+            // Get bounding box of the stroke to minimize processing area.
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            stroke.points.forEach(p => {
+                const sx = p.x * displayScaleX + imgOffsetX;
+                const sy = p.y * displayScaleY + imgOffsetY;
+                minX = Math.min(minX, sx); minY = Math.min(minY, sy);
+                maxX = Math.max(maxX, sx); maxY = Math.max(maxY, sy);
+            });
+            const brushDisplaySize = stroke.brushSize * Math.min(displayScaleX, displayScaleY);
+            minX -= brushDisplaySize / 2; minY -= brushDisplaySize / 2;
+            maxX += brushDisplaySize / 2; maxY += brushDisplaySize / 2;
+            const regionWidth = Math.max(1, maxX - minX);
+            const regionHeight = Math.max(1, maxY - minY);
+
+            if (regionWidth > 0 && regionHeight > 0) {
+                const pixelTempCanvas = document.createElement('canvas');
+                pixelTempCanvas.width = regionWidth;
+                pixelTempCanvas.height = regionHeight;
+                const pTempCtx = pixelTempCanvas.getContext('2d');
+                if (pTempCtx) {
+                    // Draw the relevant part of original image onto this smaller temp canvas
+                    pTempCtx.drawImage(originalImage,
+                        (minX - imgOffsetX) / displayScaleX, (minY - imgOffsetY) / displayScaleY, // srcX, srcY (original img coords)
+                        regionWidth / displayScaleX, regionHeight / displayScaleY,            // srcWidth, srcHeight (original img coords)
+                        0, 0, regionWidth, regionHeight                                      // destX, destY, destWidth, destHeight (on pixelTempCanvas)
+                    );
+
+                    // Pixelate this small canvas
+                    const B_SIZE = Math.max(2, stroke.effectStrength); // Ensure block size is at least 2
+                    const smallW = Math.max(1, Math.floor(regionWidth / B_SIZE));
+                    const smallH = Math.max(1, Math.floor(regionHeight / B_SIZE));
+                    pTempCtx.imageSmoothingEnabled = false;
+                    pTempCtx.drawImage(pixelTempCanvas, 0, 0, regionWidth, regionHeight, 0, 0, smallW, smallH);
+                    pTempCtx.drawImage(pixelTempCanvas, 0, 0, smallW, smallH, 0, 0, regionWidth, regionHeight);
+                    pTempCtx.imageSmoothingEnabled = true;
+
+                    // Clip main canvas with stroke path (path needs to be offset to region's top-left for this draw)
+                    ctx.clip(path);
+                    ctx.drawImage(pixelTempCanvas, minX, minY);
+                }
+            }
+            console.warn("Pixelation brush is a complex effect for arbitrary paths; current version is an approximation.");
+          }
+          ctx.restore(); // Restore clipping state
+        });
+      }
     }
 
+  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, brushStrokes, originalImageDimensions]);
 
-  }, [originalImage, cropSize, texts, gradientOverlay, logoSettings, imageEffects, manualRegions, originalImageDimensions, isApplyingEffects]);
-
-  // Separate redraw for interaction canvas (for current drawing region)
+  // Separate redraw for interaction canvas (live brush cursor and current stroke path)
   useEffect(() => {
     const iCanvas = interactionCanvasRef.current;
-    if (!iCanvas || activeTool !== 'regionSelector') {
-        // Clear interaction canvas if tool not active or canvas not present
-        if(iCanvas) {
-            const iCtx = iCanvas.getContext('2d');
-            iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
-        }
-        return;
-    };
+    if (!iCanvas) return;
+
     const iCtx = iCanvas.getContext('2d');
     if (!iCtx) return;
 
     iCtx.clearRect(0, 0, iCanvas.width, iCanvas.height);
 
-    if (isDrawing && currentDrawingRegion) {
-      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
-      iCtx.lineWidth = 2;
-      iCtx.strokeRect(currentDrawingRegion.x, currentDrawingRegion.y, currentDrawingRegion.width, currentDrawingRegion.height);
+    // Draw brush cursor preview if a brush tool is active
+    if ((activeTool === 'blurBrush' || activeTool === 'pixelateBrush') && lastPoint && originalImageDimensions && originalImage && canvasRef.current) {
+        const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+        const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+        const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+        // lastPoint is in original image coords, convert to display canvas coords for cursor
+        // This part needs the *current* mouse position, not lastPoint to draw cursor.
+        // Let's assume for now we'll handle cursor drawing within mouseMove if needed, or this effect is for current stroke path.
     }
-  }, [isDrawing, currentDrawingRegion, activeTool]);
+
+    // Draw current path being painted (if isPainting)
+    // This requires currentPath to be part of state or passed here.
+    // For simplicity, let's assume `isPainting` and `currentBrushSettings.points` (if we add it) would be used.
+    // The current approach will be to draw the stroke path in mouseMove directly.
+    // This useEffect might be better for just the brush cursor.
+    // For now, live stroke drawing will be handled in mouseMove and then committed.
+  // This useEffect will now primarily clear the interaction canvas when the tool changes or drawing stops.
+  // Live drawing preview happens in handleInteractionMouseMove.
+  }, [activeTool]);
 
 
   // Helper function to calculate image drawing parameters (to avoid repetition)
@@ -459,69 +564,117 @@ const App: React.FC = () => {
     redrawCanvas();
   }, [redrawCanvas]);
 
+  // Converts canvas interaction coordinates to original image coordinates
+  const getOriginalImageCoords = (canvasX: number, canvasY: number): { x: number, y: number } | null => {
+    if (!originalImage || !originalImageDimensions || !canvasRef.current) return null;
+    const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+
+    // Check if the click is within the drawn image bounds on the canvas
+    if (canvasX < imgOffsetX || canvasX > imgOffsetX + imgDrawWidth || canvasY < imgOffsetY || canvasY > imgOffsetY + imgDrawHeight) {
+      return null; // Click was outside the image
+    }
+
+    const scaleX = originalImageDimensions.width / imgDrawWidth;
+    const scaleY = originalImageDimensions.height / imgDrawHeight;
+    return {
+      x: (canvasX - imgOffsetX) * scaleX,
+      y: (canvasY - imgOffsetY) * scaleY,
+    };
+  };
+
+
   const handleInteractionMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeTool !== 'regionSelector' || !interactionCanvasRef.current || !originalImage) return;
+    if (!(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage) return;
+
     const pos = getMousePos(interactionCanvasRef.current, event);
-    setStartPoint(pos);
-    setIsDrawing(true);
-    setCurrentDrawingRegion({ x: pos.x, y: pos.y, width: 0, height: 0 });
+    const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
+
+    if (originalImgPos) {
+      setIsPainting(true);
+      setLastPoint(originalImgPos);
+      setCurrentStrokePoints([originalImgPos]); // Start new stroke
+    }
   };
 
   const handleInteractionMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !startPoint || !interactionCanvasRef.current) return;
+    if (!isPainting || !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush') || !interactionCanvasRef.current || !originalImage || !lastPoint) return;
+
     const pos = getMousePos(interactionCanvasRef.current, event);
-    setCurrentDrawingRegion({
-      x: Math.min(pos.x, startPoint.x),
-      y: Math.min(pos.y, startPoint.y),
-      width: Math.abs(pos.x - startPoint.x),
-      height: Math.abs(pos.y - startPoint.y),
-    });
+    const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
+
+    if (originalImgPos) {
+      const iCtx = interactionCanvasRef.current.getContext('2d');
+      if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
+
+      // Preview on interaction canvas (simple line for path, and cursor)
+      iCtx.clearRect(0,0, iCtx.canvas.width, iCtx.canvas.height);
+
+      // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
+      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
+      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
+
+      const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
+      const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
+      const currentDisplayX = originalImgPos.x * displayScaleX + imgOffsetX;
+      const currentDisplayY = originalImgPos.y * displayScaleY + imgOffsetY;
+
+      // Draw line segment for current stroke part
+      iCtx.beginPath();
+      iCtx.moveTo(lastDisplayX, lastDisplayY);
+      iCtx.lineTo(currentDisplayX, currentDisplayY);
+      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red line for path preview
+      iCtx.lineWidth = currentBrushSettings.size * displayScaleX; // Scale brush size for display
+      iCtx.lineCap = 'round';
+      iCtx.lineJoin = 'round';
+      iCtx.stroke();
+
+      // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
+      iCtx.beginPath();
+      iCtx.arc(pos.x, pos.y, currentBrushSettings.size * displayScaleX / 2, 0, Math.PI * 2);
+      iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+      iCtx.lineWidth = 1;
+      iCtx.stroke();
+
+      setCurrentStrokePoints(prev => [...prev, originalImgPos]);
+      setLastPoint(originalImgPos);
+    }
   };
 
   const handleInteractionMouseUp = () => {
-    if (!isDrawing || !currentDrawingRegion || !interactionCanvasRef.current || !originalImage || !originalImageDimensions) {
-      setIsDrawing(false);
-      return;
-    }
-    setIsDrawing(false);
+    if (!isPainting || !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush')) return;
+    setIsPainting(false);
+    setLastPoint(null);
 
-    // Convert canvas coordinates to original image coordinates
-    const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, interactionCanvasRef.current, originalImageDimensions);
-    const scaleX = originalImageDimensions.width / imgDrawWidth;
-    const scaleY = originalImageDimensions.height / imgDrawHeight;
-
-    const originalX = (currentDrawingRegion.x - imgOffsetX) * scaleX;
-    const originalY = (currentDrawingRegion.y - imgOffsetY) * scaleY;
-    const originalWidth = currentDrawingRegion.width * scaleX;
-    const originalHeight = currentDrawingRegion.height * scaleY;
-
-    if (originalWidth > 0 && originalHeight > 0) {
-      const newRegion: ManualRegion = {
-        id: `manual-${Date.now()}`,
-        x: Math.max(0, originalX), // Ensure not negative due to drawing outside image bounds on canvas
-        y: Math.max(0, originalY),
-        width: originalWidth,
-        height: originalHeight,
-        effect: 'none',
-        params: { shape: 'squared' }
+    if (currentStrokePoints.length > 1 && currentBrushSettings.type) {
+      const newStroke: BrushStroke = {
+        id: `stroke-${Date.now()}`,
+        type: currentBrushSettings.type,
+        points: [...currentStrokePoints],
+        brushSize: currentBrushSettings.size,
+        effectStrength: currentBrushSettings.strength,
       };
-      // Further clamp to ensure region is within original image boundaries fully
-      newRegion.width = Math.min(newRegion.width, originalImageDimensions.width - newRegion.x);
-      newRegion.height = Math.min(newRegion.height, originalImageDimensions.height - newRegion.y);
-
-      if (newRegion.width > 0 && newRegion.height > 0) {
-         setManualRegions(prev => [...prev, newRegion]);
-      }
+      setBrushStrokes(prev => [...prev, newStroke]);
     }
-    setCurrentDrawingRegion(null);
-    setStartPoint(null);
+    setCurrentStrokePoints([]); // Clear points for next stroke
+
+    // Clear interaction canvas after stroke is committed to main canvas via redraw
+    const iCanvas = interactionCanvasRef.current;
+    if (iCanvas) {
+        const iCtx = iCanvas.getContext('2d');
+        iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
+    }
   };
 
   const handleInteractionMouseLeave = () => {
-    if (isDrawing) {
-      setIsDrawing(false);
-      setCurrentDrawingRegion(null);
-      setStartPoint(null);
+    if (isPainting) { // If painting and mouse leaves, finalize stroke
+      handleInteractionMouseUp();
+    }
+    // Clear brush cursor if not painting and mouse leaves
+    const iCanvas = interactionCanvasRef.current;
+     if (iCanvas && !(activeTool === 'blurBrush' || activeTool === 'pixelateBrush')) {
+        const iCtx = iCanvas.getContext('2d');
+        iCtx?.clearRect(0,0, iCanvas.width, iCanvas.height);
     }
   };
 
@@ -533,12 +686,14 @@ const App: React.FC = () => {
       // Reset states for new image
       setOriginalImage(null);
       setOriginalImageDimensions(null);
-      setManualRegions([]);
-      setCurrentDrawingRegion(null);
-      setIsDrawing(false);
-      setStartPoint(null);
-      // setDetectedFaces([]); // This state is removed
-      // setIsLoadingFaces(false); // This state is removed
+      setBrushStrokes([]); // Clear brush strokes
+      setCurrentStrokePoints([]);
+      setIsPainting(false);
+      setLastPoint(null);
+      // setManualRegions([]); // This state is removed
+      // setCurrentDrawingRegion(null); // This state is removed
+      // setIsDrawing(false); // This state is removed
+      // setStartPoint(null); // This state is removed
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -912,109 +1067,72 @@ const App: React.FC = () => {
           </div>
         );
       // REMOVED ERRONEOUS DEFAULT HERE
-      // case 'faceProcessor': // This case is now removed / replaced by regionSelector
-        // ... old faceProcessor UI ...
-      case 'regionSelector':
+      // case 'faceProcessor': // This case is now removed
+      // case 'regionSelector': // This case is now removed
+
+      case 'blurBrush':
+      case 'pixelateBrush':
         if (!originalImage) {
-          return <div className="p-4 text-gray-400">Upload an image to define regions.</div>;
+          return <div className="p-4 text-gray-400">Upload an image to use brush tools.</div>;
         }
 
-        const handleRegionEffectChange = (regionId: string, newEffect: 'none' | 'blur' | 'pixelate') => {
-          setManualRegions(prevRegions => prevRegions.map(r =>
-            r.id === regionId ? { ...r, effect: newEffect, params: r.params || {shape: 'squared'} } : r
-          ));
-        };
+        const isBlurActive = activeTool === 'blurBrush';
+        const isPixelateActive = activeTool === 'pixelateBrush';
 
-        const handleRegionParamChange = (regionId: string, paramName: string, value: string | number) => {
-          setManualRegions(prevRegions => prevRegions.map(r =>
-            r.id === regionId ? { ...r, params: { ...(r.params || {shape: 'squared'}), [paramName]: value } } : r
-          ));
-        };
+        // Ensure currentBrushSettings reflects the active tool
+        if (isBlurActive && currentBrushSettings.type !== 'blur') {
+            setCurrentBrushSettings(prev => ({ ...prev, type: 'blur' }));
+        } else if (isPixelateActive && currentBrushSettings.type !== 'pixelate') {
+            setCurrentBrushSettings(prev => ({ ...prev, type: 'pixelate' }));
+        }
 
-        const deleteRegion = (regionId: string) => {
-          setManualRegions(prevRegions => prevRegions.filter(r => r.id !== regionId));
-        };
 
         return (
           <div className="space-y-4 p-4">
-            <h3 className="text-lg font-semibold text-blue-300">Define & Anonymize Areas</h3>
-            <p className="text-sm text-gray-400">Click and drag on the image to define areas. Then, select an effect for each area below.</p>
+            <h3 className="text-lg font-semibold text-blue-300">
+              {isBlurActive ? 'Blur Brush Settings' : 'Pixelate Brush Settings'}
+            </h3>
 
-            {manualRegions.length === 0 && (
-              <p className="text-gray-400 text-center py-4">No areas defined yet. Draw on the image to start.</p>
+            <div>
+              <label htmlFor="brush-size" className="block text-sm font-medium text-gray-300">Brush Size ({currentBrushSettings.size}px)</label>
+              <input
+                type="range" id="brush-size"
+                min="5" max="100" step="1"
+                value={currentBrushSettings.size}
+                onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, size: parseInt(e.target.value) }))}
+                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+            </div>
+
+            {isBlurActive && (
+              <div>
+                <label htmlFor="blur-intensity" className="block text-sm font-medium text-gray-300">Blur Intensity ({currentBrushSettings.strength})</label>
+                <input
+                  type="range" id="blur-intensity"
+                  min="1" max="30" step="1"
+                  value={currentBrushSettings.strength}
+                  onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, strength: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+              </div>
             )}
 
-            {manualRegions.map((region, index) => (
-              <fieldset key={region.id} className="space-y-2 border border-gray-600 p-3 rounded-md">
-                <div className="flex justify-between items-center">
-                  <legend className="text-sm font-medium text-blue-400 px-1">Area {index + 1}</legend>
-                  <button
-                    onClick={() => deleteRegion(region.id)}
-                    className="text-red-400 hover:text-red-300 text-xs"
-                    aria-label={`Delete Area ${index + 1}`}
-                  >
-                    Delete
-                  </button>
-                </div>
-
-                <select
-                  value={region.effect}
-                  onChange={(e) => handleRegionEffectChange(region.id, e.target.value as 'none'|'blur'|'pixelate')}
-                  className="w-full p-2 bg-gray-700 border border-gray-600 rounded-md"
-                >
-                  <option value="none">None</option>
-                  <option value="blur">Blur</option>
-                  <option value="pixelate">Pixelate</option>
-                  {/* Add 'sticker' option here if implementing stickers for manual regions */}
-                </select>
-
-                {region.effect === 'blur' && (
-                  <div className="mt-2 space-y-1">
-                    <label htmlFor={`region-${region.id}-blur-intensity`} className="block text-sm font-medium text-gray-300">Intensity</label>
-                    <input
-                      type="range" id={`region-${region.id}-blur-intensity`}
-                      min="1" max="50" step="1"
-                      value={region.params.intensity || 10}
-                      onChange={(e) => handleRegionParamChange(region.id, 'intensity', parseInt(e.target.value))}
-                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                    <label htmlFor={`region-${region.id}-blur-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
-                    <select
-                      value={region.params.shape || 'squared'}
-                      onChange={e => handleRegionParamChange(region.id, 'shape', e.target.value)}
-                      className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
-                      <option value="squared">Squared</option>
-                      <option value="rounded">Rounded</option>
-                    </select>
-                  </div>
-                )}
-                {region.effect === 'pixelate' && (
-                  <div className="mt-2 space-y-1">
-                    <label htmlFor={`region-${region.id}-pixelate-blocksize`} className="block text-sm font-medium text-gray-300">Block Size</label>
-                    <input
-                      type="range" id={`region-${region.id}-pixelate-blocksize`}
-                      min="2" max="50" step="1"
-                      value={region.params.block_size || 10}
-                      onChange={(e) => handleRegionParamChange(region.id, 'block_size', parseInt(e.target.value))}
-                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                    <label htmlFor={`region-${region.id}-pixelate-shape`} className="block text-sm font-medium text-gray-300">Shape</label>
-                    <select
-                      value={region.params.shape || 'squared'}
-                      onChange={e => handleRegionParamChange(region.id, 'shape', e.target.value)}
-                      className="w-full p-1 bg-gray-700 border border-gray-600 rounded-md text-xs">
-                      <option value="squared">Squared</option>
-                      <option value="rounded">Rounded</option>
-                    </select>
-                  </div>
-                )}
-              </fieldset>
-            ))}
+            {isPixelateActive && (
+              <div>
+                <label htmlFor="pixelate-blocksize" className="block text-sm font-medium text-gray-300">Block Size ({currentBrushSettings.strength}px)</label>
+                <input
+                  type="range" id="pixelate-blocksize"
+                  min="2" max="50" step="1"
+                  value={currentBrushSettings.strength}
+                  onChange={(e) => setCurrentBrushSettings(prev => ({ ...prev, strength: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+              </div>
+            )}
 
             <button
-              onClick={handleApplyManualEffects} // This function will be created/updated in next step
-              className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md mt-4 disabled:opacity-50"
-              disabled={isApplyingEffects || manualRegions.length === 0 || manualRegions.every(r => r.effect === 'none')}
+              onClick={() => setBrushStrokes([])}
+              className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-3 rounded-md mt-4 text-sm"
+              disabled={brushStrokes.length === 0}
             >
-              {isApplyingEffects ? 'Applying...' : 'Apply Effects to Areas'}
+              Clear All Brush Strokes
             </button>
           </div>
         );
@@ -1023,73 +1141,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleApplyManualEffects = async () => {
-    if (!originalImage || !imageFileName || !originalImageDimensions || manualRegions.length === 0) {
-      console.error("Cannot apply manual effects: Missing data or no regions defined.");
-      return;
-    }
-
-    const regionsToProcess = manualRegions.filter(r => r.effect !== 'none');
-    if (regionsToProcess.length === 0) {
-      alert("No effects selected for any defined areas.");
-      return;
-    }
-
-    setIsApplyingEffects(true);
-
-    // Prepare payload for the backend: list of {x, y, width, height, effect, params}
-    const payloadRegions = regionsToProcess.map(region => ({
-      x: region.x,
-      y: region.y,
-      width: region.width,
-      height: region.height,
-      effect: region.effect,
-      params: region.params, // Includes shape, intensity/block_size
-    }));
-
-    const payload = {
-      image_filename: imageFileName,
-      regions: payloadRegions,
-    };
-
-    console.log("Simulating API call to /api/apply_effects with manual regions payload:", JSON.stringify(payload, null, 2));
-
-    // --- Mock API call for applying effects ---
-    await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
-
-    // Mock response: In a real scenario, this would be a new image blob/URL
-    // For this mock, we'll simulate the image being processed by:
-    // 1. Creating a new image object (could be the same originalImage.src for simplicity in mock)
-    // 2. Clearing detected faces and selections as the "effects are now part of the image"
-
-    console.log("Mock API: Effects applied. Frontend would now receive and display the new image.");
-
-    // To visually represent that something happened in the mock:
-    // Option A: Draw red boxes where effects were applied (more complex for mock)
-    // Option B: Simple: Just clear the selection states and detected faces, load the "new" image.
-    // For now, we'll just clear states and "reload" the original image as if it's the processed one.
-
-    const newProcessedImage = new Image();
-    newProcessedImage.onload = () => {
-      setOriginalImage(newProcessedImage); // This would be the new image from backend
-      setManualRegions([]); // Clear manually defined regions
-      // The title of the image could also be updated e.g. append "_processed_regions"
-      // setImageFileName(prev => prev.replace('_edited', '_edited_regions_processed'));
-      setIsApplyingEffects(false);
-      setActiveTool(null); // Close the tool panel
-      alert("Mock: Effects applied to manual regions! The image displayed is notionally the processed one.");
-    };
-    newProcessedImage.onerror = () => {
-        console.error("Mock: Error loading the 'processed' image.");
-        setIsApplyingEffects(false);
-        alert("Mock: Error applying effects (simulated image load error).");
-    }
-    // In a real scenario, the src would be the URL of the image returned by the backend
-    // For the mock, we re-use the original image's src.
-    newProcessedImage.src = originalImage.src;
-
-
-  };
+  // handleApplyManualEffects function removed as effects are client-side and backend call is no longer made for this.
   
 
   const toolIcons: { name: ActiveTool; icon: React.ElementType, label: string }[] = [
@@ -1098,7 +1150,8 @@ const App: React.FC = () => {
     { name: 'gradient', icon: GradientIcon, label: 'Gradient' },
     { name: 'logo', icon: LogoIcon, label: 'Logo' },
     { name: 'effects', icon: EffectsIcon, label: 'Effects'},
-    { name: 'regionSelector', icon: RegionSelectIcon, label: 'Select Area'},
+    { name: 'blurBrush', icon: BlurBrushIcon, label: 'Blur Brush'},
+    { name: 'pixelateBrush', icon: PixelateBrushIcon, label: 'Pixelate Brush'},
   ];
 
   return (
