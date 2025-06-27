@@ -825,8 +825,7 @@ const App: React.FC = () => {
             </button>
           </div>
         );
-      default:
-        return <div className="p-4 text-gray-400">Select a tool to see its options.</div>;
+      // REMOVED ERRONEOUS DEFAULT HERE
       case 'faceProcessor':
         if (!originalImage) {
           return <div className="p-4 text-gray-400">Upload an image to use face tools.</div>;
