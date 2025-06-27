@@ -683,41 +683,22 @@ const App: React.FC = () => {
     const pos = getMousePos(interactionCanvasRef.current, event);
     const originalImgPos = getOriginalImageCoords(pos.x, pos.y);
 
+    // In handleInteractionMouseMove, replace inline preview/cursor logic with helper
     if (originalImgPos) {
       const iCtx = interactionCanvasRef.current.getContext('2d');
       if (!iCtx || !canvasRef.current || !originalImageDimensions) return;
-
-      // Preview on interaction canvas (simple line for path, and cursor)
       iCtx.clearRect(0,0, iCtx.canvas.width, iCtx.canvas.height);
-
-      // Convert lastPoint (original coords) and originalImgPos (original coords) to display canvas coordinates for drawing path segment
-      const { drawWidth: imgDrawWidth, drawHeight: imgDrawHeight, offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
-      const displayScaleX = imgDrawWidth / originalImageDimensions.width;
-      const displayScaleY = imgDrawHeight / originalImageDimensions.height;
-
-      const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
-      const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
-      const currentDisplayX = originalImgPos.x * displayScaleX + imgOffsetX;
-      const currentDisplayY = originalImgPos.y * displayScaleY + imgOffsetY;
-
-      // Draw line segment for current stroke part
-      iCtx.beginPath();
-      iCtx.moveTo(lastDisplayX, lastDisplayY);
-      iCtx.lineTo(currentDisplayX, currentDisplayY);
-      iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; // Red line for path preview
-      iCtx.lineWidth = currentBrushSettings.size * displayScaleX; // Scale brush size for display
-      iCtx.lineCap = 'round';
-      iCtx.lineJoin = 'round';
-      iCtx.stroke();
-
-      // Draw brush cursor outline at current mouse position (pos is already in interaction canvas coords)
-      const brushRadius = (currentBrushSettings.size * displayScaleX) / 2;
-      iCtx.beginPath();
-      iCtx.arc(currentDisplayX, currentDisplayY, brushRadius, 0, Math.PI * 2);
-      iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
-      iCtx.lineWidth = 1;
-      iCtx.stroke();
-
+      const { offsetX: imgOffsetX, offsetY: imgOffsetY } = calculateImageDrawParams(originalImage, canvasRef.current, originalImageDimensions);
+      drawBrushCursorAndPreview(
+        iCtx,
+        lastPoint,
+        originalImgPos,
+        currentBrushSettings.size,
+        canvasRef.current,
+        originalImageDimensions,
+        imgOffsetX,
+        imgOffsetY
+      );
       setCurrentStrokePoints(prev => [...prev, originalImgPos]);
       setLastPoint(originalImgPos);
     }
@@ -1315,3 +1296,46 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+// --- Brush Canvas Helpers ---
+const getDisplayScales = (canvas: HTMLCanvasElement, originalImageDimensions: {width: number, height: number}) => {
+  const { drawWidth, drawHeight } = calculateImageDrawParams(originalImage, canvas, originalImageDimensions);
+  return {
+    displayScaleX: drawWidth / originalImageDimensions.width,
+    displayScaleY: drawHeight / originalImageDimensions.height
+  };
+};
+
+const drawBrushCursorAndPreview = (
+  iCtx: CanvasRenderingContext2D,
+  lastPoint: {x: number, y: number} | null,
+  currentPoint: {x: number, y: number} | null,
+  brushSize: number,
+  canvas: HTMLCanvasElement,
+  originalImageDimensions: {width: number, height: number},
+  imgOffsetX: number,
+  imgOffsetY: number
+) => {
+  const { displayScaleX, displayScaleY } = getDisplayScales(canvas, originalImageDimensions);
+  if (lastPoint && currentPoint) {
+    const lastDisplayX = lastPoint.x * displayScaleX + imgOffsetX;
+    const lastDisplayY = lastPoint.y * displayScaleY + imgOffsetY;
+    const currentDisplayX = currentPoint.x * displayScaleX + imgOffsetX;
+    const currentDisplayY = currentPoint.y * displayScaleY + imgOffsetY;
+    // Draw stroke preview
+    iCtx.beginPath();
+    iCtx.moveTo(lastDisplayX, lastDisplayY);
+    iCtx.lineTo(currentDisplayX, currentDisplayY);
+    iCtx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
+    iCtx.lineWidth = brushSize * displayScaleX;
+    iCtx.lineCap = 'round';
+    iCtx.lineJoin = 'round';
+    iCtx.stroke();
+    // Draw brush cursor at current mouse
+    iCtx.beginPath();
+    iCtx.arc(currentDisplayX, currentDisplayY, (brushSize * displayScaleX) / 2, 0, Math.PI * 2);
+    iCtx.strokeStyle = 'rgba(0,0,0,0.5)';
+    iCtx.lineWidth = 1;
+    iCtx.stroke();
+  }
+};
